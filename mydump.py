@@ -14,16 +14,28 @@ import pymysql
 SILENT = False
 DEBUG = False
 
-class myBlob:
-    value=None
 
-    def __init__(self,s):
-        self.value=base64.b64encode(s)
+class MyBlob:
+    value = None
 
-    @property
+    def __init__(self,val):
+        self.value = base64.b64encode(val)
+
+    def get(self):
+        return base64.b64decode(self.value)
+
+    def set(self, val):
+        self.value = base64.b64encode(val)
+
     def __str__(self):
         return base64.b64decode(self.value)
 
+    def __eq__(self, other):
+        if not isinstance(other, MyBlob):
+            return False
+        if other.value == self.value:
+            return True
+        return False
 
 
 def debugb(string):
@@ -58,7 +70,7 @@ def prepare(dbname, prefix="backup_", usedate=False, fulldir=None):
 
 def dumptable(filename, obj):
     f = open(filename, "wb")
-    pickle.dump(obj, f, -1)
+    pickle.dump(obj, f, pickle.HIGHEST_PROTOCOL)
     f.close()
 
 
@@ -104,15 +116,28 @@ def get_table_ddl(con=None, tablename=""):
 
 
 def get_table_rows(con=None, tablename=""):
+    fields = get_table_desc(con, tablename)
+
     cur = con.cursor()
     cur.execute("SELECT * FROM `" + tablename + "`;")
-    return cur.fetchall()
+
+    rows = []
+    row = cur.fetchone()
+    while row is not None:
+        for key in row.keys():
+            if fields[key] in ("blob"):
+                row[key] = get_blob_field(row[key])
+                pprint.pprint(row[key])
+        rows.append(row)
+        row = cur.fetchone()
+
+    return rows
 
 
-def get_blob_field(con=None, field="", table=""):
-    cur = con.cursor()
-    cur.execute("SELECT HEX(" + field + ") from `" + table + "`;")
-    return cur.fetchall()
+def get_blob_field(val=None):
+    if not val:
+        return None
+    return MyBlob(val)
 
 
 def get_tables(con=None, dbname=None, prefix=None, usedate=False, fulldir=None):
@@ -122,26 +147,16 @@ def get_tables(con=None, dbname=None, prefix=None, usedate=False, fulldir=None):
     cur.execute("SHOW TABLES")
     for table in cur.fetchall():
 
-        # if table.values()[0] not in ("AssetEntry"):
-        #     continue
         obj = get_table_ddl(con, table.values()[0])
- #       fields =  get_table_desc(con, table.values()[0] )
 
         debug(table.values()[0])
 
         lines = get_table_rows(con, table.values()[0])
-        # loop on keys in order to change values
-
- #       for lk in range( len(lines) ):
- #           for key in lines[lk].keys():
- #               if fields[key] == "blob":
- #                   lines[lk][key] = myBlob(get_blob_field(con, fields[key], table.values()[0]))
- #               pprint.pprint(lines[lk][key])
         if DEBUG:
             pprint.pprint(lines)
 
         tot = len(lines)
-        lines = base64.b64encode(pickle.dumps(lines))
+        lines = base64.b64encode(pickle.dumps(lines,pickle.HIGHEST_PROTOCOL))
 
         obj[u'Lines'] = lines
 
@@ -149,6 +164,42 @@ def get_tables(con=None, dbname=None, prefix=None, usedate=False, fulldir=None):
         debug("\t" + str(tot) + " Rows OK.")
         debug("\n")
     con.close()
+
+
+# def get_tables(con=None, dbname=None, prefix=None, usedate=False, fulldir=None):
+#     cur = con.cursor()
+#     dirname = prepare(dbname, prefix, usedate, fulldir)
+#
+#     cur.execute("SHOW TABLES")
+#     for table in cur.fetchall():
+#
+#         # if table.values()[0] not in ("AssetEntry"):
+#         #     continue
+#         obj = get_table_ddl(con, table.values()[0])
+#  #       fields =  get_table_desc(con, table.values()[0] )
+#
+#         debug(table.values()[0])
+#
+#         lines = get_table_rows(con, table.values()[0])
+#         # loop on keys in order to change values
+#
+#  #       for lk in range( len(lines) ):
+#  #           for key in lines[lk].keys():
+#  #               if fields[key] == "blob":
+#  #                   lines[lk][key] = MyBlob(get_blob_field(con, fields[key], table.values()[0]))
+#  #               pprint.pprint(lines[lk][key])
+#         if DEBUG:
+#             pprint.pprint(lines)
+#
+#         tot = len(lines)
+#         lines = base64.b64encode(pickle.dumps(lines))
+#
+#         obj[u'Lines'] = lines
+#
+#         dumptable(dirname + "/" + table.values()[0] + ".obj", obj)
+#         debug("\t" + str(tot) + " Rows OK.")
+#         debug("\n")
+#     con.close()
 
 
 def create_table(con=None, obj=None):
@@ -190,7 +241,7 @@ def create_table(con=None, obj=None):
     tot = len(lines)
     ncur = 1
     for line in lines:
-        query = u""
+        query = ""
         query += "INSERT INTO `" + tablename + "` ( " + ",".join(line.keys()) + " ) VALUES ("
 
         first = True
@@ -198,7 +249,7 @@ def create_table(con=None, obj=None):
             if first:
                 first = False
             else:
-                query += u", "
+                query += ", "
             if isinstance( val, types.NoneType ):
                 query += pymysql.converters.escape_None(val)
             elif isinstance(val, (int, long)):
@@ -208,9 +259,12 @@ def create_table(con=None, obj=None):
             elif isinstance(val, bool):
                 query += pymysql.converters.escape_bool(val)
             elif isinstance(val, datetime.datetime):
-                query += u"'" + unicode(val) + u"'"
+                query += "'" + unicode(val) + "'"
             elif isinstance(val, types.UnicodeType):
                 query += pymysql.converters.escape_unicode(val)
+            elif isinstance(val, MyBlob):
+                pprint.pprint(val.get())
+                query += val.get()
 
         query += ");"
 
