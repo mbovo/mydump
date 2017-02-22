@@ -118,26 +118,23 @@ def get_table_ddl(con=None, tablename=""):
 def get_table_rows(con=None, tablename=""):
     fields = get_table_desc(con, tablename)
 
+    query = "SELECT "
+    first = True
+    for field in fields.keys():
+        query += "," if first==False else ""
+        first = False
+
+        if fields[field] in ("blob"):
+            query += "HEX(`" + field + "`)"
+        else:
+            query += "`" + field + "`"
+
+    query += " FROM `" + tablename + "`;"
+
     cur = con.cursor()
-    cur.execute("SELECT * FROM `" + tablename + "`;")
+    cur.execute(query)
 
-    rows = []
-    row = cur.fetchone()
-    while row is not None:
-        for key in row.keys():
-            if fields[key] in ("blob"):
-                row[key] = get_blob_field(row[key])
-                pprint.pprint(row[key])
-        rows.append(row)
-        row = cur.fetchone()
-
-    return rows
-
-
-def get_blob_field(val=None):
-    if not val:
-        return None
-    return MyBlob(val)
+    return cur.fetchall()
 
 
 def get_tables(con=None, dbname=None, prefix=None, usedate=False, fulldir=None):
