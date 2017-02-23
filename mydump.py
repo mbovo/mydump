@@ -208,7 +208,8 @@ def create_table(con=None, obj=None):
     tablename = obj[u'Table']
     tablestatement = obj[u'Create Table']
 
-    debug("TABLE\t" + tablename)
+    if DEBUG:
+        print u"DEBUG: Table: {}".format(tablename)
 
     safe = """
         /*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
@@ -230,11 +231,11 @@ def create_table(con=None, obj=None):
     """
     cur.execute("DROP TABLE IF EXISTS `" + tablename + "`;")
     cur.execute(safe)
-    debug("\t DROP")
+    #debug("\t DROP")
 
     cur.execute(tablestatement)
     cur.execute("/*!40101 SET character_set_client = @saved_cs_client */;")
-    debug("\t CREATE\t ")
+    #debug("\t CREATE\t ")
 
     cur.execute("LOCK TABLES `" + tablename + "` WRITE; /*!40000 ALTER TABLE `" + tablename + "` DISABLE KEYS */;")
 
@@ -246,18 +247,18 @@ def create_table(con=None, obj=None):
     ncur = 1
     for line in lines:
         query = ""
-        query += "INSERT INTO `" + tablename + "` ( " + ",".join(line.keys()) + " ) VALUES ("
+        query += "INSERT INTO `" + tablename + "` ( " + ",".join(fields.keys()) + " ) VALUES ("
+
+        if DEBUG:
+            print u"DEBUG:\t      Row {} / {}".format(ncur, tot)
 
         first = True
-
-        #     elif isinstance(val, MyBlob):
-        #         pprint.pprint(val.get())
-        #         query += val.get()
         for field in fields.keys():
             query += "," if first is False else ""
             first = False
 
-            print u"\tDEBUG:   field: %s  val: %s" % (field, line[field])
+            if DEBUG:
+                print u"\tDEBUG:   field: %s  val: %s" % (field, line[field])
 
             if fields[field] in ("blob"):
                 query += "UNHEX('" + line[field] + "')"
@@ -278,15 +279,15 @@ def create_table(con=None, obj=None):
 
         query += ");"
 
-        if DEBUG:
-            debug(query + u"\n")
+        #if DEBUG:
+        #    debug(query + u"\n")
         cur.execute(query.encode('utf-8'))
 
-        debugb("\tINSERT \t" + str(ncur) + "/" + str(tot))
+        #debugb("\tINSERT \t" + str(ncur) + "/" + str(tot))
         ncur += 1
 
     cur.execute("/*!40000 ALTER TABLE `" + tablename + "` ENABLE KEYS */; UNLOCK TABLES `" + tablename + "`; ")
-    debug("\n")
+    #debug("\n")
 
 
 def list_fs(path, db, password, user, host, charset):
