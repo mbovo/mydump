@@ -125,7 +125,7 @@ def get_table_rows(con=None, tablename=""):
         first = False
 
         if fields[field] in ("blob"):
-            query += "HEX(`" + field + "`)"
+            query += "HEX(`" + field + "`) AS " + field
         else:
             query += "`" + field + "`"
 
@@ -146,20 +146,24 @@ def get_tables(con=None, dbname=None, prefix=None, usedate=False, fulldir=None):
 
         obj = get_table_ddl(con, table.values()[0])
 
-        debug(table.values()[0])
+        if DEBUG:
+            print u"DEBUG: Table: {}".format(table.values()[0])
 
         lines = get_table_rows(con, table.values()[0])
         if DEBUG:
-            pprint.pprint(lines)
+            count = 1
+            tot = len(lines)
+            for line in lines:
+                print u"DEBUG:\t      Row {} / {}".format(count, tot)
+                count += 1
+                for field in line:
+                    print u"DEBUG:\t\t   Field: {0:30}  Val: {1}".format(field, line[field]).encode('utf-8',errors='ignore')
 
-        tot = len(lines)
-        lines = base64.b64encode(pickle.dumps(lines,pickle.HIGHEST_PROTOCOL))
+        lines = base64.b64encode(pickle.dumps(lines, pickle.HIGHEST_PROTOCOL))
 
         obj[u'Lines'] = lines
 
         dumptable(dirname + "/" + table.values()[0] + ".obj", obj)
-        debug("\t" + str(tot) + " Rows OK.")
-        debug("\n")
     con.close()
 
 
@@ -235,6 +239,9 @@ def create_table(con=None, obj=None):
     cur.execute("LOCK TABLES `" + tablename + "` WRITE; /*!40000 ALTER TABLE `" + tablename + "` DISABLE KEYS */;")
 
     lines = pickle.loads(base64.b64decode(obj[u'Lines']))
+
+    fields = get_table_desc(con, tablename)
+
     tot = len(lines)
     ncur = 1
     for line in lines:
@@ -242,26 +249,32 @@ def create_table(con=None, obj=None):
         query += "INSERT INTO `" + tablename + "` ( " + ",".join(line.keys()) + " ) VALUES ("
 
         first = True
-        for val in line.values():
-            if first:
-                first = False
+
+        #     elif isinstance(val, MyBlob):
+        #         pprint.pprint(val.get())
+        #         query += val.get()
+        for field in fields.keys():
+            query += "," if first is False else ""
+            first = False
+
+            print u"\tDEBUG:   field: %s  val: %s" % (field, line[field])
+
+            if fields[field] in ("blob"):
+                query += "UNHEX('" + line[field] + "')"
             else:
-                query += ", "
-            if isinstance( val, types.NoneType ):
-                query += pymysql.converters.escape_None(val)
-            elif isinstance(val, (int, long)):
-                query += pymysql.converters.escape_int(val)
-            elif isinstance(val, float):
-                query += pymysql.converters.escape_float(val)
-            elif isinstance(val, bool):
-                query += pymysql.converters.escape_bool(val)
-            elif isinstance(val, datetime.datetime):
-                query += "'" + unicode(val) + "'"
-            elif isinstance(val, types.UnicodeType):
-                query += pymysql.converters.escape_unicode(val)
-            elif isinstance(val, MyBlob):
-                pprint.pprint(val.get())
-                query += val.get()
+                val = line[field]
+                if isinstance(val, types.NoneType):
+                    query += pymysql.converters.escape_None(val)
+                elif isinstance(val, (int, long)):
+                    query += pymysql.converters.escape_int(val)
+                elif isinstance(val, float):
+                    query += pymysql.converters.escape_float(val)
+                elif isinstance(val, bool):
+                    query += pymysql.converters.escape_bool(val)
+                elif isinstance(val, datetime.datetime):
+                    query += "'" + unicode(val) + "'"
+                elif isinstance(val, types.UnicodeType):
+                    query += pymysql.converters.escape_unicode(val)
 
         query += ");"
 
