@@ -5,51 +5,12 @@ import base64
 import datetime
 import os
 import pickle
-import pprint
 import sys
 import types
 
 import pymysql
 
-SILENT = False
-DEBUG = False
-
-
-class MyBlob:
-    value = None
-
-    def __init__(self,val):
-        self.value = base64.b64encode(val)
-
-    def get(self):
-        return base64.b64decode(self.value)
-
-    def set(self, val):
-        self.value = base64.b64encode(val)
-
-    def __str__(self):
-        return base64.b64decode(self.value)
-
-    def __eq__(self, other):
-        if not isinstance(other, MyBlob):
-            return False
-        if other.value == self.value:
-            return True
-        return False
-
-
-def debugb(string):
-    if SILENT:
-        return 0
-    sys.stderr.write(string)
-    for i in range(0, len(string)):
-        sys.stderr.write("\b")
-
-
-def debug(string):
-    if SILENT:
-        return 0
-    sys.stderr.write(string.encode('utf-8'))
+VERBOSE = 0
 
 
 def prepare(dbname, prefix="backup_", usedate=False, fulldir=None):
@@ -60,10 +21,12 @@ def prepare(dbname, prefix="backup_", usedate=False, fulldir=None):
         if usedate:
             now = datetime.datetime.now()
             dest += "_" + now.strftime("%Y-%m-%d_%H-%M")
+
+    print u"Store location: {}".format(dirname)
     try:
         os.mkdir(dirname)
     except OSError as e:
-        debug(str(e) + "\n")
+        print u"ERROR:\tError creating directory on {} : {}".format(dirname, e.strerror)
 
     return dirname
 
@@ -105,7 +68,6 @@ def get_table_desc(con=None, tablename=""):
     desc = dict()
     for field in cur.fetchall():
         desc[field[u'Field']] = field[u'Type']
-    #pprint.pprint(desc)
     return desc
 
 
@@ -124,7 +86,7 @@ def get_table_rows(con=None, tablename=""):
         query += "," if first==False else ""
         first = False
 
-        if fields[field] in ("blob"):
+        if fields[field] in ("blob", "longblob", "mediumblob"):
             query += "HEX(`" + field + "`) AS " + field
         else:
             query += "`" + field + "`"
@@ -137,28 +99,68 @@ def get_table_rows(con=None, tablename=""):
     return cur.fetchall()
 
 
-def get_tables(con=None, dbname=None, prefix=None, usedate=False, fulldir=None):
+def jump_table(tablename=None, tablelist=None, exclude_mode=False):
+    assert(isinstance(tablename, (str, unicode)))
+    assert(isinstance(tablelist, (list, tuple)))
+
+    if tablelist and isinstance(tablelist, (list, tuple)):
+        if exclude_mode:
+            if tablename in tablelist:
+                # avoid dump of this table,
+                if int(VERBOSE) >= 2:
+                    print u"DEBUG: Ignoring {}".format(tablename)
+                return True
+        else:
+            if tablename not in tablelist:
+                # avoid dump of this table
+                if int(VERBOSE) >= 2:
+                    print u"DEBUG: Ignoring {}".format(tablename)
+                return True
+    return False
+
+def get_tables(con=None, dbname=None, prefix=None, usedate=False, fulldir=None, exclude_mode=False, tables=None):
+    """
+
+    :param con: Database Connection
+    :param dbname: Database name
+    :param prefix:  Database prefix for export directory
+    :param usedate: Use timestamp in output directory
+    :param fulldir: Use a full directory
+    :param exclude_mode:   Exclude?
+    :param tables:  Tables list
+    """
+    global VERBOSE
+
     cur = con.cursor()
     dirname = prepare(dbname, prefix, usedate, fulldir)
+
+    if int(VERBOSE) >= 1:
+        print u"DEBUG: Exclude: {}\nDEBUG: Table List: {}".format(exclude_mode, unicode(tables))
 
     cur.execute("SHOW TABLES")
     for table in cur.fetchall():
 
+        if jump_table(table.values()[0], tables, exclude_mode):
+            continue
+
         obj = get_table_ddl(con, table.values()[0])
 
-        if DEBUG:
-            print u"DEBUG: Table: {}".format(table.values()[0])
+        if int(VERBOSE) >= 1:
+            print u"DEBUG: Dumping: {}".format(table.values()[0])
 
         lines = get_table_rows(con, table.values()[0])
-        if DEBUG:
+
+        if int(VERBOSE) >= 3:
             count = 1
             tot = len(lines)
             for line in lines:
                 print u"DEBUG:\t      Row {} / {}".format(count, tot)
                 count += 1
                 for field in line:
-                    print u"DEBUG:\t\t   Field: {0:30}  Val: {1}".format(field, line[field]).encode('utf-8',errors='ignore')
+                    print u"DEBUG:\t\t   Field: {0:30}  Val: {1}".format(field,
+                                                                         line[field]).encode('utf-8', errors='ignore')
 
+        # encoding lines in single object
         lines = base64.b64encode(pickle.dumps(lines, pickle.HIGHEST_PROTOCOL))
 
         obj[u'Lines'] = lines
@@ -167,49 +169,18 @@ def get_tables(con=None, dbname=None, prefix=None, usedate=False, fulldir=None):
     con.close()
 
 
-# def get_tables(con=None, dbname=None, prefix=None, usedate=False, fulldir=None):
-#     cur = con.cursor()
-#     dirname = prepare(dbname, prefix, usedate, fulldir)
-#
-#     cur.execute("SHOW TABLES")
-#     for table in cur.fetchall():
-#
-#         # if table.values()[0] not in ("AssetEntry"):
-#         #     continue
-#         obj = get_table_ddl(con, table.values()[0])
-#  #       fields =  get_table_desc(con, table.values()[0] )
-#
-#         debug(table.values()[0])
-#
-#         lines = get_table_rows(con, table.values()[0])
-#         # loop on keys in order to change values
-#
-#  #       for lk in range( len(lines) ):
-#  #           for key in lines[lk].keys():
-#  #               if fields[key] == "blob":
-#  #                   lines[lk][key] = MyBlob(get_blob_field(con, fields[key], table.values()[0]))
-#  #               pprint.pprint(lines[lk][key])
-#         if DEBUG:
-#             pprint.pprint(lines)
-#
-#         tot = len(lines)
-#         lines = base64.b64encode(pickle.dumps(lines))
-#
-#         obj[u'Lines'] = lines
-#
-#         dumptable(dirname + "/" + table.values()[0] + ".obj", obj)
-#         debug("\t" + str(tot) + " Rows OK.")
-#         debug("\n")
-#     con.close()
+def create_table(con=None, obj=None, exclude_mode=False, tablelist=None):
+    global VERBOSE
 
-
-def create_table(con=None, obj=None):
     cur = con.cursor()
     tablename = obj[u'Table']
     tablestatement = obj[u'Create Table']
 
-    if DEBUG:
-        print u"DEBUG: Table: {}".format(tablename)
+    if jump_table(tablename, tablelist, exclude_mode):
+        return False
+
+    if int(VERBOSE) >= 1:
+        print u"DEBUG: Restoring: {}".format(tablename)
 
     safe = """
         /*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
@@ -231,11 +202,8 @@ def create_table(con=None, obj=None):
     """
     cur.execute("DROP TABLE IF EXISTS `" + tablename + "`;")
     cur.execute(safe)
-    #debug("\t DROP")
-
     cur.execute(tablestatement)
     cur.execute("/*!40101 SET character_set_client = @saved_cs_client */;")
-    #debug("\t CREATE\t ")
 
     cur.execute("LOCK TABLES `" + tablename + "` WRITE; /*!40000 ALTER TABLE `" + tablename + "` DISABLE KEYS */;")
 
@@ -247,9 +215,9 @@ def create_table(con=None, obj=None):
     ncur = 1
     for line in lines:
         query = ""
-        query += "INSERT INTO `" + tablename + "` ( " + ",".join(fields.keys()) + " ) VALUES ("
+        query += "INSERT INTO `" + tablename + "` ( `" + "`,`".join(fields.keys()) + "` ) VALUES ("
 
-        if DEBUG:
+        if int(VERBOSE) >= 2:
             print u"DEBUG:\t      Row {} / {}".format(ncur, tot)
 
         first = True
@@ -257,11 +225,14 @@ def create_table(con=None, obj=None):
             query += "," if first is False else ""
             first = False
 
-            if DEBUG:
-                print u"\tDEBUG:   field: %s  val: %s" % (field, line[field])
+            if int(VERBOSE) >= 3:
+                print u"DEBUG:\t\t   Field: {0:30}  Val: {1}".format(field, line[field])\
+                    .encode('utf-8', errors='ignore')
 
-            if fields[field] in ("blob"):
+            if fields[field] in ("blob", "longblob", "mediumblob"):
                 query += "UNHEX('" + line[field] + "')"
+            elif fields[field] in ("date"):
+                query += pymysql.converters.escape_date(line[field])
             else:
                 val = line[field]
                 if isinstance(val, types.NoneType):
@@ -279,34 +250,43 @@ def create_table(con=None, obj=None):
 
         query += ");"
 
-        #if DEBUG:
-        #    debug(query + u"\n")
-        cur.execute(query.encode('utf-8'))
+        if int(VERBOSE) >= 4:
+            try:
+                print u"DEBUG:\n {}".format(query).encode('utf-8', errors='ignore')
+            except:
+                pass
 
-        #debugb("\tINSERT \t" + str(ncur) + "/" + str(tot))
+        try:
+            cur.execute(query.encode('utf-8'))
+        except pymysql.err.ProgrammingError as e:
+            print u"Error executing query: {}".format(e)
+            print u"{}".format(query.encode('utf-8', errors='ignore'))
+            con.close()
+            exit(1)
+
         ncur += 1
 
     cur.execute("/*!40000 ALTER TABLE `" + tablename + "` ENABLE KEYS */; UNLOCK TABLES `" + tablename + "`; ")
-    #debug("\n")
 
 
-def list_fs(path, db, password, user, host, charset):
+def list_fs(path, db, password, user, host, charset, exclude_mode=False, tables=None):
+    if int(VERBOSE) >= 1:
+        print u"DEBUG: Exclude: {}\nDEBUG: Table List: {}".format(exclude_mode, unicode(tables))
     for dirname, dirnames, filenames in os.walk(path):
         for filename in filenames:
-            # print(filename)
             obj = loadtable(os.path.join(dirname, filename))
             con = open_db(host, db, user, password, charset)
             assert (isinstance(con, pymysql.connections.Connection))
-            create_table(con, obj)
+            create_table(con, obj, exclude_mode, tables)
             con.close()
 
 
 def _build_parser():
     parser = argparse.ArgumentParser(prog="mydump")
 
-    g1 = parser.add_mutually_exclusive_group(required=True)
-    g1.add_argument("-d", "--dump", action="store_true", help="Dump database to disk (default)")
-    g1.add_argument("-r", "--restore", action="store_true", help="Restore database from disk")
+    g1 = parser.add_mutually_exclusive_group(required=False)
+    g1.add_argument("-d", "--dump", action="store_true", default=True, help="Dump database to disk (default)")
+    g1.add_argument("-r", "--restore", action="store_true", default=False, help="Restore database from disk")
 
     parser.add_argument("-H", "--host", default="localhost", help="Database host (default: localhost)")
     parser.add_argument("-c", "--charset", default="utf8", help="Database and output charset (default: UTF8)")
@@ -315,20 +295,26 @@ def _build_parser():
     parser.add_argument("-t", "--timestamp", action="store_true",
                         help="Use timestamp in destination directory (default: false )")
 
+    g2 = parser.add_mutually_exclusive_group(required=False)
+    g2.add_argument("-i", "--include", action="store_false", help="Explicitly dump only the specified tables")
+    g2.add_argument("-e", "--exclude", action="store_true", help="Exclude specified tables from dump")
+
     parser.add_argument("-u", "--user", help="Database Username", required=True)
     parser.add_argument("-p", "--password", help="Database Password", required=True)
 
-    parser.add_argument("-q", "--quiet", help="Be Quiet", action="store_true")
-    parser.add_argument("-D", "--debug", help="Be Verbose", action="store_true")
+    parser.add_argument("-v", "--verbose", default=0, help="Be Verbose" )
 
     parser.add_argument("dbname", nargs=1, type=str, help="Database name")
+
+    parser.add_argument("tables", nargs="*", type=unicode, default=None, help="Table name to include in dump "
+                                                                              "(default everything)")
 
     assert isinstance(parser, object)
     return parser
 
 
 def _parse_command(parser=None):
-    global SILENT, DEBUG
+    global VERBOSE
     assert isinstance(parser, argparse.ArgumentParser)
     args = parser.parse_args()
 
@@ -336,19 +322,26 @@ def _parse_command(parser=None):
         parser.print_help()
         return 1
 
+    #TODO: only one db at time is supported for now
     args.dbname = args.dbname[0]
-    pprint.pprint(args)
 
-    SILENT = args.quiet
-    DEBUG = args.debug
+    exclude_mode = args.exclude
 
-    if args.dump:
-        get_tables(open_db(db=args.dbname, password=args.password, user=args.user, host=args.host, charset=args.charset)
-                   , args.dbname, args.prefix, args.timestamp, args.dest)
+    VERBOSE = args.verbose
+
+    if int(VERBOSE) >0:
+        print u"DEBUG:\tVerbose {}\nDEBUG\tMYDBC URL: {}:{}@:/{}".format(VERBOSE, args.user, args.password, args.host, args.dbname)
 
     if args.restore:
         list_fs(prepare(args.dbname, args.prefix, args.timestamp, args.dest),
-                db=args.dbname, password=args.password, user=args.user, host=args.host, charset=args.charset)
+                db=args.dbname, password=args.password, user=args.user, host=args.host, charset=args.charset,
+        exclude_mode=exclude_mode, tables=args.tables)
+        return 0
+
+    if args.dump:
+        get_tables(open_db(db=args.dbname, password=args.password, user=args.user, host=args.host, charset=args.charset)
+                   , args.dbname, args.prefix, args.timestamp, args.dest, exclude_mode, args.tables)
+
 
     return 0
 
