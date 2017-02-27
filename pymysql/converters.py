@@ -4,6 +4,7 @@ import datetime
 from decimal import Decimal
 import re
 import time
+import struct
 
 from .constants import FIELD_TYPE, FLAG
 from .charset import charset_by_id, charset_to_encoding
