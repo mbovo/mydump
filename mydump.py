@@ -20,7 +20,7 @@ def prepare(dbname, prefix="backup_", usedate=False, fulldir=None):
         dirname = os.getcwd() + "/" + prefix + dbname
         if usedate:
             now = datetime.datetime.now()
-            dest += "_" + now.strftime("%Y-%m-%d_%H-%M")
+            dirname += "_" + now.strftime("%Y-%m-%d_%H-%M")
 
     print u"Store location: {}".format(dirname)
     try:
@@ -83,7 +83,7 @@ def get_table_rows(con=None, tablename=""):
     query = "SELECT "
     first = True
     for field in fields.keys():
-        query += "," if first==False else ""
+        query += "," if first is False else ""
         first = False
 
         if fields[field] in ("blob", "longblob", "mediumblob"):
@@ -117,6 +117,7 @@ def jump_table(tablename=None, tablelist=None, exclude_mode=False):
                     print u"DEBUG: Ignoring {}".format(tablename)
                 return True
     return False
+
 
 def get_tables(con=None, dbname=None, prefix=None, usedate=False, fulldir=None, exclude_mode=False, tables=None):
     """
@@ -231,7 +232,7 @@ def create_table(con=None, obj=None, exclude_mode=False, tablelist=None):
 
             if fields[field] in ("blob", "longblob", "mediumblob"):
                 query += "UNHEX('" + line[field] + "')"
-            elif fields[field] in ("date"):
+            elif fields[field] in "date":
                 query += pymysql.converters.escape_date(line[field])
             else:
                 val = line[field]
@@ -251,6 +252,7 @@ def create_table(con=None, obj=None, exclude_mode=False, tablelist=None):
         query += ");"
 
         if int(VERBOSE) >= 4:
+            # noinspection PyBroadException
             try:
                 print u"DEBUG:\n {}".format(query).encode('utf-8', errors='ignore')
             except:
@@ -302,7 +304,7 @@ def _build_parser():
     parser.add_argument("-u", "--user", help="Database Username", required=True)
     parser.add_argument("-p", "--password", help="Database Password", required=True)
 
-    parser.add_argument("-v", "--verbose", default=0, help="Be Verbose" )
+    parser.add_argument("-v", "--verbose", default=0, help="Be Verbose")
 
     parser.add_argument("dbname", nargs=1, type=str, help="Database name")
 
@@ -322,26 +324,26 @@ def _parse_command(parser=None):
         parser.print_help()
         return 1
 
-    #TODO: only one db at time is supported for now
+    # TODO: only one db at time is supported for now
     args.dbname = args.dbname[0]
 
     exclude_mode = args.exclude
 
     VERBOSE = args.verbose
 
-    if int(VERBOSE) >0:
-        print u"DEBUG:\tVerbose {}\nDEBUG\tMYDBC URL: {}:{}@:/{}".format(VERBOSE, args.user, args.password, args.host, args.dbname)
+    if int(VERBOSE) > 0:
+        print u"DEBUG:\tVerbose {}\nDEBUG\tMYDBC URL: {}:{}@:/{}".format(VERBOSE, args.user, args.password, args.host,
+                                                                         args.dbname)
 
     if args.restore:
         list_fs(prepare(args.dbname, args.prefix, args.timestamp, args.dest),
                 db=args.dbname, password=args.password, user=args.user, host=args.host, charset=args.charset,
-        exclude_mode=exclude_mode, tables=args.tables)
+                exclude_mode=exclude_mode, tables=args.tables)
         return 0
 
     if args.dump:
         get_tables(open_db(db=args.dbname, password=args.password, user=args.user, host=args.host, charset=args.charset)
                    , args.dbname, args.prefix, args.timestamp, args.dest, exclude_mode, args.tables)
-
 
     return 0
 
