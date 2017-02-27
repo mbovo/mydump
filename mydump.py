@@ -14,6 +14,16 @@ VERBOSE = 0
 
 
 def prepare(dbname, prefix="backup_", usedate=False, fulldir=None):
+    """
+
+    Create target directory where store dump files
+
+    :param dbname: Database name
+    :param prefix: directory prefix
+    :param usedate: boolean, use timestamp
+    :param fulldir: fulldir name instead of creation
+    :return: directory path as string
+    """
     if fulldir:
         dirname = fulldir
     else:
@@ -32,12 +42,23 @@ def prepare(dbname, prefix="backup_", usedate=False, fulldir=None):
 
 
 def dumptable(filename, obj):
+    """
+    Dump a table to a file using python pickle
+    :param filename: target filename
+    :param obj: table object
+    :return:
+    """
     f = open(filename, "wb")
     pickle.dump(obj, f, pickle.HIGHEST_PROTOCOL)
     f.close()
 
 
 def loadtable(filename):
+    """
+    Load a table from a file using python pickle
+    :param filename: target filename
+    :return: table object
+    """
     f = open(filename, "rb")
     obj = pickle.load(f)
     f.close()
@@ -45,6 +66,15 @@ def loadtable(filename):
 
 
 def open_db(host='localhost', db='', user='root', password='', charset='utf8'):
+    """
+    Open new connection to Database
+    :param host: database host
+    :param db: database name
+    :param user: schema username
+    :param password: user password
+    :param charset: used charset
+    :return: connection object
+    """
     con = pymysql.connect(host=host,
                           user=user,
                           password=password,
@@ -55,9 +85,8 @@ def open_db(host='localhost', db='', user='root', password='', charset='utf8'):
 
 
 def get_table_desc(con=None, tablename=""):
-
     """
-
+    Retrieve DESC of a table
     :param con: Connection Object
     :param tablename: String database name
     :return: dict with association Field:Type
@@ -72,6 +101,12 @@ def get_table_desc(con=None, tablename=""):
 
 
 def get_table_ddl(con=None, tablename=""):
+    """
+    Retrieve table DDL
+    :param con: connection object
+    :param tablename: table name as string
+    :return: dict object Create:Statements
+    """
     cur = con.cursor()
     cur.execute("SHOW CREATE TABLE `" + tablename + "`;")
     return cur.fetchone()
@@ -100,6 +135,13 @@ def get_table_rows(con=None, tablename=""):
 
 
 def jump_table(tablename=None, tablelist=None, exclude_mode=False):
+    """
+    Return boolean if a named table should be included/excluded from the operation performed
+    :param tablename: name of the table
+    :param tablelist: list of table to include/exclude
+    :param exclude_mode: operate in exclude mode
+    :return: Boolean
+    """
     assert(isinstance(tablename, (str, unicode)))
     assert(isinstance(tablelist, (list, tuple)))
 
@@ -121,7 +163,7 @@ def jump_table(tablename=None, tablelist=None, exclude_mode=False):
 
 def get_tables(con=None, dbname=None, prefix=None, usedate=False, fulldir=None, exclude_mode=False, tables=None):
     """
-
+    Retrieve all data from all tables
     :param con: Database Connection
     :param dbname: Database name
     :param prefix:  Database prefix for export directory
@@ -171,8 +213,15 @@ def get_tables(con=None, dbname=None, prefix=None, usedate=False, fulldir=None, 
 
 
 def create_table(con=None, obj=None, exclude_mode=False, tablelist=None):
+    """
+    Restore a table and its data from a previously saved dump
+    :param con: connection Ojbect
+    :param obj: Table object
+    :param exclude_mode: Boolean
+    :param tablelist: List of table to include/exclude
+    :return: None
+    """
     global VERBOSE
-
     cur = con.cursor()
     tablename = obj[u'Table']
     tablestatement = obj[u'Create Table']
@@ -272,6 +321,18 @@ def create_table(con=None, obj=None, exclude_mode=False, tablelist=None):
 
 
 def list_fs(path, db, password, user, host, charset, exclude_mode=False, tables=None):
+    """
+    List filesystem path and try to restore every object found as table in database
+    :param path: fs path
+    :param db: database name
+    :param password: user password
+    :param user: username
+    :param host: hostname
+    :param charset: charset used in connection
+    :param exclude_mode: boolean
+    :param tables: list of tables
+    :return: None
+    """
     if int(VERBOSE) >= 1:
         print u"DEBUG: Exclude: {}\nDEBUG: Table List: {}".format(exclude_mode, unicode(tables))
     for dirname, dirnames, filenames in os.walk(path):
