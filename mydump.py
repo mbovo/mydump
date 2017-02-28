@@ -13,6 +13,29 @@ import pymysql
 VERBOSE = 0
 
 
+def mkdir(dirname):
+    try:
+        if os.path.isdir(dirname):
+            if int(VERBOSE)>0:
+                print u"DEBUG:\tTarget directory already exists {}".format(dirname)
+            return False
+        os.mkdir(dirname)
+        return True
+    except OSError as e:
+        print u"ERROR:\tError creating directory on {} : {}".format(dirname, e.strerror)
+        sys.exit(4)
+
+
+def checkdir(dirname):
+    try:
+        if os.path.isdir(dirname):
+            return True
+        else:
+            return False
+    except OSError as e:
+        print u"ERROR:\t Unable to check if {} is a directory: {}".format(dirname, e.strerror)
+
+
 def prepare(dbname, prefix="backup_", usedate=False, fulldir=None):
     """
 
@@ -32,12 +55,8 @@ def prepare(dbname, prefix="backup_", usedate=False, fulldir=None):
             now = datetime.datetime.now()
             dirname += "_" + now.strftime("%Y-%m-%d_%H-%M")
 
-    print u"Store location: {}".format(dirname)
-    try:
-        os.mkdir(dirname)
-    except OSError as e:
-        print u"ERROR:\tError creating directory on {} : {}".format(dirname, e.strerror)
-
+    if int(VERBOSE) > 0:
+        print u"DEBUG: Target directory: {}".format(dirname)
     return dirname
 
 
@@ -48,9 +67,12 @@ def dumptable(filename, obj):
     :param obj: table object
     :return:
     """
-    f = open(filename, "wb")
-    pickle.dump(obj, f, pickle.HIGHEST_PROTOCOL)
-    f.close()
+    try:
+        f = open(filename, "wb")
+        pickle.dump(obj, f, pickle.HIGHEST_PROTOCOL)
+        f.close()
+    except pickle.UnpicklingError as e:
+        print u"ERROR: Unable to save object to file [{}] : {}".format(filename, repr(e))
 
 
 def loadtable(filename):
@@ -59,9 +81,13 @@ def loadtable(filename):
     :param filename: target filename
     :return: table object
     """
-    f = open(filename, "rb")
-    obj = pickle.load(f)
-    f.close()
+    try:
+        f = open(filename, "rb")
+        obj = pickle.load(f)
+        f.close()
+    except Exception as e:
+        print u"ERROR: Unable to load object from file: [{}] : {}".format(filename, repr(e))
+        sys.exit(20)
     return obj
 
 
@@ -176,6 +202,7 @@ def get_tables(con=None, dbname=None, prefix=None, usedate=False, fulldir=None, 
 
     cur = con.cursor()
     dirname = prepare(dbname, prefix, usedate, fulldir)
+    mkdir(dirname)
 
     if int(VERBOSE) >= 1:
         print u"DEBUG: Exclude: {}\nDEBUG: Table List: {}".format(exclude_mode, unicode(tables))
@@ -335,6 +362,11 @@ def list_fs(path, db, password, user, host, charset, exclude_mode=False, tables=
     """
     if int(VERBOSE) >= 1:
         print u"DEBUG: Exclude: {}\nDEBUG: Table List: {}".format(exclude_mode, unicode(tables))
+
+    if not checkdir(path):
+        print u"ERROR:\t Target directory doesn't exists: {}".format(path)
+        return
+
     for dirname, dirnames, filenames in os.walk(path):
         for filename in filenames:
             obj = loadtable(os.path.join(dirname, filename))
@@ -353,7 +385,7 @@ def _build_parser():
 
     parser.add_argument("-H", "--host", default="localhost", help="Database host (default: localhost)")
     parser.add_argument("-c", "--charset", default="utf8", help="Database and output charset (default: UTF8)")
-    parser.add_argument("-o", "--dest", default=None, help="Output destination directory (default: $prefix_$dbname)")
+    parser.add_argument("-o", "--target", default=None, help="Target directory (default: $prefix_$dbname)")
     parser.add_argument("-P", "--prefix", default="backup_", help="Prefix of destination directory (default: backup_ )")
     parser.add_argument("-t", "--timestamp", action="store_true",
                         help="Use timestamp in destination directory (default: false )")
@@ -393,18 +425,18 @@ def _parse_command(parser=None):
     VERBOSE = args.verbose
 
     if int(VERBOSE) > 0:
-        print u"DEBUG:\tVerbose {}\nDEBUG\tMYDBC URL: {}:{}@:/{}".format(VERBOSE, args.user, args.password, args.host,
+        print u"DEBUG: Verbose {}\nDEBUG: MYDBC URL: {}:{}@:/{}".format(VERBOSE, args.user, args.password, args.host,
                                                                          args.dbname)
 
     if args.restore:
-        list_fs(prepare(args.dbname, args.prefix, args.timestamp, args.dest),
+        list_fs(prepare(args.dbname, args.prefix, args.timestamp, args.target),
                 db=args.dbname, password=args.password, user=args.user, host=args.host, charset=args.charset,
                 exclude_mode=exclude_mode, tables=args.tables)
         return 0
 
     if args.dump:
         get_tables(open_db(db=args.dbname, password=args.password, user=args.user, host=args.host, charset=args.charset)
-                   , args.dbname, args.prefix, args.timestamp, args.dest, exclude_mode, args.tables)
+                   , args.dbname, args.prefix, args.timestamp, args.target, exclude_mode, args.tables)
 
     return 0
 

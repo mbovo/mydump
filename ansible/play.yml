@@ -1,0 +1,7 @@
+---
+- hosts: local
+  tasks:
+    - name: "test module"
+      mytest: username="pippo"
+
+
