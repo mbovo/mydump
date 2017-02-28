@@ -520,7 +520,7 @@ class Connection(object):
 
     The proper way to get an instance of this class is to call
     connect().
-    """
+    # """
 
     _sock = None
     _auth_plugin_name = ''
