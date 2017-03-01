@@ -1,7 +1,6 @@
 #!/usr/bin/env python2
 
 import argparse
-import base64
 import datetime
 import os
 import pickle
@@ -12,120 +11,254 @@ import pymysql
 
 VERBOSE = 0
 
+SQL_ST_PRE = """
+/*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
+/*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;
+/*!40101 SET @OLD_COLLATION_CONNECTION=@@COLLATION_CONNECTION */;
+/*!40101 SET NAMES utf8 */;
+/*!40103 SET @OLD_TIME_ZONE=@@TIME_ZONE */;
+/*!40103 SET TIME_ZONE='+00:00' */;
+/*!40014 SET @OLD_UNIQUE_CHECKS=@@UNIQUE_CHECKS, UNIQUE_CHECKS=0 */;
+/*!40014 SET @OLD_FOREIGN_KEY_CHECKS=@@FOREIGN_KEY_CHECKS, FOREIGN_KEY_CHECKS=0 */;
+/*!40101 SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='NO_AUTO_VALUE_ON_ZERO' */;
+/*!40111 SET @OLD_SQL_NOTES=@@SQL_NOTES, SQL_NOTES=0 */;
+"""
 
-def mkdir(dirname):
-    try:
-        if os.path.isdir(dirname):
-            if int(VERBOSE)>0:
-                print u"DEBUG:\tTarget directory already exists {}".format(dirname)
-            return False
-        os.mkdir(dirname)
-        return True
-    except OSError as e:
-        print u"ERROR:\tError creating directory on {} : {}".format(dirname, e.strerror)
-        sys.exit(4)
+SQL_ST_POST = """
+/*!40101 SET SQL_MODE=@OLD_SQL_MODE */;
+/*!40014 SET FOREIGN_KEY_CHECKS=@OLD_FOREIGN_KEY_CHECKS */;
+/*!40014 SET UNIQUE_CHECKS=@OLD_UNIQUE_CHECKS */;
+/*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
+/*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;
+/*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
+/*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
+"""
 
+SQL_DROP_ST_PRE = """
+#     /*!40101 SET @saved_cs_client     = @@character_set_client */;
+#     /*!40101 SET character_set_client = @saved_cs_client */;
+"""
 
-def checkdir(dirname):
-    try:
-        if os.path.isdir(dirname):
-            return True
-        else:
-            return False
-    except OSError as e:
-        print u"ERROR:\t Unable to check if {} is a directory: {}".format(dirname, e.strerror)
+SQL_DROP_ST_POST = None
 
-
-def prepare(dbname, prefix="backup_", usedate=False, fulldir=None):
-    """
-
-    Create target directory where store dump files
-
-    :param dbname: Database name
-    :param prefix: directory prefix
-    :param usedate: boolean, use timestamp
-    :param fulldir: fulldir name instead of creation
-    :return: directory path as string
-    """
-    if fulldir:
-        dirname = fulldir
-    else:
-        dirname = os.getcwd() + "/" + prefix + dbname
-        if usedate:
-            now = datetime.datetime.now()
-            dirname += "_" + now.strftime("%Y-%m-%d_%H-%M")
-
-    if int(VERBOSE) > 0:
-        print u"DEBUG: Target directory: {}".format(dirname)
-    return dirname
+SQL_INSERT_ST_PRE = """
+/*!40101 SET character_set_client = utf8 */;
+LOCK TABLES `{}` WRITE;
+ /*!40000 ALTER TABLE `{}` DISABLE KEYS */;
+"""
+SQL_INSERT_ST_POST = """
+/*!40000 ALTER TABLE `{}` ENABLE KEYS */;
+UNLOCK TABLES `{}`;
+"""
 
 
 class Database:
 
-    def __init__(self):
-        pass
+    # a mysql connection object
+    _conn = None
+    _dbname = ""
+    _odbc = ""
+    _dirname = ""
+    _tables = dict()
+    _charset = "utf8"
 
-    def __init__(self):
-        pass
+    # will be converted into tuple() after __init__
+    _tablenames = list()
+
+    # define an argument subset of pymysql Connect object
+    def __init__(self, host=None, user=None, password="",
+                 db=None, port=0, unix_socket=None,
+                 charset='utf8', sql_mode=None,
+                 conv=None, use_unicode=None,
+                 cursorclass=pymysql.cursors.DictCursor, ssl=None):
+
+        self._conn = pymysql.connect(host=host,
+                                     user=user,
+                                     password=password,
+                                     db=db,
+                                     charset=charset,
+                                     sql_mode=sql_mode,
+                                     conv=conv,
+                                     use_unicode=use_unicode,
+                                     ssl=ssl,
+                                     cursorclass=cursorclass)
+        self._dbname = db
+        self._odbc = "{}:{}@{}/{}".format(user, password, host, db)
+        self._tablenames = list()
+        self._tables = dict()
+        self._charset = charset
+        self._dirname = ""
+
+        cur = self._conn.cursor()
+        cur.execute("SHOW TABLES")
+
+        for i in cur:
+            self._tablenames.append(i.values()[0])
+        self._tablenames = tuple(self._tablenames)
 
     def __str__(self):
-        pass
+        return self.__unicode__()
 
-    def __eq__(self, other):
-        pass
+    def __unicode__(self):
+        return unicode(self._odbc)
+
+    def tablenames(self):
+        return self._tablenames
+
+    def tables(self):
+        return self._tables
 
     def __contains__(self, item):
-        pass
+        if item in self._tablenames:
+            return True
+        return False
+
+    def __iter__(self):
+        return self._tablenames.__iter__()
 
     def __getitem__(self, item):
-        pass
-
-    def __setitem__(self, key, value):
-        pass
+        if item not in self:
+            raise ValueError("Table {} not found in database".format(item))
+        if item not in self._tables:
+            table = Table(item, self._conn)
+            self._tables[item] = table
+        else:
+            table = self._tables[item]
+        return table
 
     def __delitem__(self, key):
         pass
 
-    def __hash__(self):
-        pass
+    def __len__(self):
+        return len(self._tablenames)
 
-    def __unicode__(self):
-        pass
+    def __del__(self):
+        self._conn.close()
+        del self._tablenames
 
-    def __sizeof__(self):
-        pass
+    def __fetch_n_dump(self, tablelist=None, exclude=False, dump=False, refetch=True, dirname=None ):
+
+        # use the whole list  or choose
+        if not tablelist:
+            tablelist = self._tablenames
+        else:
+            if exclude:
+                # exclude table listed in tablelist
+                tablelist = list(set(self._tablenames) - set(tablelist))
+            else:
+                # include only table listed in tablelist
+                tablelist = list(set(self._tablenames) & set(tablelist))
+
+        # force loading data
+        for tablename in tablelist:
+            if refetch:
+                self[tablename]
+            if dump and dirname:
+                table = self._tables[tablename]
+                table.dump(os.path.join(dirname, tablename) + ".obj")
+
+        # return table loaded for real
+        return len(self._tables), tablelist
+
+    def fetch(self, tablelist=None, exclude=False):
+        return self.__fetch_n_dump(tablelist, exclude)
+
+    def dump(self, dirname=None, tablelist=None, exclude=False, refetch=True):
+        mkdir(dirname)
+        self.__fetch_n_dump(tablelist, exclude, dump=True, refetch=refetch, dirname=dirname)
+
+    def restore(self, path=None, tablelist=None, exclude=False):
+        # load list of filename
+        checkdir(path)
+        tables_on_fs = list()
+        for dirname, dirnames, filenames in os.walk(path):
+            for filename in filenames:
+                tables_on_fs.append(filename[:-4])
+
+        if not tablelist:
+            tablelist = tables_on_fs
+        else:
+            if exclude:
+                tablelist = list(set(tables_on_fs) - set(tablelist))
+            else:
+                tablelist = list(set(tables_on_fs) & set(tablelist))
+
+        for tname in tablelist:
+            table = Table()
+            table = table.load(os.path.join(dirname, tname)+".obj")
+
+            self._tables[tname] = table
+            cur = self._conn.cursor()
+            if SQL_DROP_ST_PRE:
+                cur.execute(SQL_DROP_ST_PRE)
+            try:
+                cur.execute(u"DROP TABLE `{}`;".format(tname))
+            except pymysql.err.MySQLError as e:
+                print "Unable to DROP table `{} {}` exception raised".format(tname, e)
+            try:
+                cur.execute(str(table))
+            except pymysql.err.MySQLError as e:
+                print "Unable to CREATE table `{} {}` exception raised".format(tname, e)
+            if SQL_DROP_ST_POST:
+                cur.execute(SQL_DROP_ST_POST)
+
+            # restore each row
+            if SQL_INSERT_ST_PRE:
+                cur.execute(SQL_INSERT_ST_PRE.format(tname, tname))
+            for row in table:
+                try:
+                    cur.execute(str(row))
+                except pymysql.err.MySQLError as e:
+                    print "Unable to INSERT INTO table `{} {}` exception raised".format(tname, e)
+                    print "-"*10
+                    print row
+                    print "-"*10
+
+            if SQL_INSERT_ST_POST:
+                cur.execute(unicode(SQL_INSERT_ST_POST.format(tname, tname)))
+
+        return len(self._tables), tablelist
 
 
 class Table:
 
-    # Connection object, should be a pymysql connection object
-    _conn = None
-
     _tablename = None
-    _rows = None
-    _desc = None
-    _ddl = None
+    _rows = list()
+    _desc = dict()
+    _ddl = dict()
+    _charset = 'utf-8'
 
-    def __init__(self, tablename, conn=None):
-        if conn and isinstance(conn, pymysql.connections.Connection):
-            self._conn = conn
-        else:
-            raise Exception("Cannot instantiate given connection")
+    def __init__(self, tablename="", conn=None, charset=None):
+        if not conn or not isinstance(conn, pymysql.connections.Connection):
+            return
+
+        if charset:
+            self._charset = charset
 
         self._tablename = tablename
-        self._desc = self._get_desc()
-        self._ddl = self._get_ddl()
+        self._desc = self._get_desc(conn)
+        self._ddl = self._get_ddl(conn)
         self._rows = []
 
-        for row in self._get_rows():
+        for row in self._get_rows(conn):
             self._rows.append(Row(row, self._desc, tablename))
-
 
     def __str__(self):
         return self._ddl[u'Create Table']
 
     def __unicode__(self):
-        return self._ddl[u'Create Table']
+        return unicode(self._ddl[u'Create Table']).encode(self._charset)
+
+    def __eq__(self, other):
+        # This is very cost impacting
+        if not isinstance(other, Table):
+            return False
+        if len(other.rows()) != len(self._rows):
+            return False
+        for row in other.rows():
+            if row not in self._rows:
+                return False
+        return True
 
     def __getitem__(self, item):
         if item < len(self._rows):
@@ -137,10 +270,13 @@ class Table:
     def __iter__(self):
         return self._rows.__iter__()
 
+    def rows(self):
+        return self._rows
+
     def name(self):
         return self._tablename
 
-    def _get_ddl(self):
+    def _get_ddl(self, conn=None):
         """
         Retrieve table DDL
         :param con: connection object
@@ -148,11 +284,11 @@ class Table:
         :return: dict object Create:Statements
         """
         tablename = self._tablename
-        cur = self._conn.cursor()
+        cur = conn.cursor()
         cur.execute("SHOW CREATE TABLE `" + tablename + "`;")
         return cur.fetchone()
 
-    def _get_desc(self):
+    def _get_desc(self, conn=None):
         """
         Retrieve DESC of a table
         :param con: Connection Object
@@ -160,7 +296,7 @@ class Table:
         :return: dict with association Field:Type
         """
         tablename = self._tablename
-        cur = self._conn.cursor()
+        cur = conn.cursor()
         cur.execute("DESC `" + tablename + "`;")
 
         desc = dict()
@@ -168,7 +304,7 @@ class Table:
             desc[field[u'Field']] = field[u'Type']
         return desc
 
-    def _get_rows(self):
+    def _get_rows(self,conn):
         tablename = self._tablename
         fields = self._desc
 
@@ -185,7 +321,7 @@ class Table:
 
         query += " FROM `" + tablename + "`;"
 
-        cur = self._conn.cursor()
+        cur = conn.cursor()
         cur.execute(query)
 
         return cur.fetchall()
@@ -217,34 +353,50 @@ class Table:
         except Exception as e:
             print u"ERROR: Unable to load object from file: [{}] : {}".format(filename, repr(e))
             sys.exit(20)
-        return obj
+        return self
 
 
 class Row:
 
-    _element = None
-    _desc = None
+    _element = dict()
+    _desc = dict()
     _tablename = None
+    _charset = "utf-8"
 
-    def __init__(self, row=dict(), desc=dict(), tablename=""):
+    def __init__(self, row=dict(), desc=dict(), tablename="", charset="utf-8"):
         self._element = row
         self._desc = desc
         self._tablename = tablename
+        self._charset = charset
 
     def __str__(self):
-        return str(self.__unicode__())
+        return self._get_ddl().encode(self._charset)
 
     def __contains__(self, item):
-        pass
+        return item in self._element
+
+    def __eq__(self, other):
+        if not isinstance(other, Row):
+            return False
+        if cmp(self.dict(), other.dict()) == 0:
+            return True
+        return False
 
     def __getitem__(self, item):
-        pass
+        if item in self:
+            return self._element[item]
+
+    def dict(self):
+        return self._element
 
     def __unicode__(self):
-        return self._get_ddl()
+        return self._get_ddl().encode(self._charset)
 
     def __len__(self):
         return len(self._element)
+
+    def __iter__(self):
+        return self._element.__iter__()
 
     def _get_ddl(self):
         query = ""
@@ -264,9 +416,9 @@ class Row:
                     .encode('utf-8', errors='ignore')
 
             if fields[field] in ("blob", "longblob", "mediumblob"):
-                query += "UNHEX('" + line[field] + "')"
+                query += "UNHEX('" + self._element[field] + u"')"
             elif fields[field] in "date":
-                query += pymysql.converters.escape_date(line[field])
+                query += pymysql.converters.escape_date(self._element[field])
             else:
                 val = self._element[field]
                 if isinstance(val, types.NoneType):
@@ -287,7 +439,7 @@ class Row:
         if int(VERBOSE) >= 4:
             # noinspection PyBroadException
             try:
-                print u"DEBUG:\n {}".format(query).encode('utf-8', errors='ignore')
+                print u"DEBUG:\n {}".format(query).encode(self._charset, errors='ignore')
             except:
                 pass
         return query
@@ -360,6 +512,51 @@ class Row:
 #
 #     return cur.fetchall()
 
+def mkdir(dirname):
+    try:
+        if os.path.isdir(dirname):
+            if int(VERBOSE)>0:
+                print u"DEBUG:\tTarget directory already exists {}".format(dirname)
+            return False
+        os.mkdir(dirname)
+        return True
+    except OSError as e:
+        print u"ERROR:\tError creating directory on {} : {}".format(dirname, e.strerror)
+        sys.exit(4)
+
+
+def checkdir(dirname):
+    try:
+        if os.path.isdir(dirname):
+            return True
+        else:
+            return False
+    except OSError as e:
+        print u"ERROR:\t Unable to check if {} is a directory: {}".format(dirname, e.strerror)
+
+
+def prepare(dbname, prefix="backup_", usedate=False, fulldir=None):
+    """
+
+    Create target directory where store dump files
+
+    :param dbname: Database name
+    :param prefix: directory prefix
+    :param usedate: boolean, use timestamp
+    :param fulldir: fulldir name instead of creation
+    :return: directory path as string
+    """
+    if fulldir:
+        dirname = fulldir
+    else:
+        dirname = os.getcwd() + "/" + prefix + dbname
+        if usedate:
+            now = datetime.datetime.now()
+            dirname += "_" + now.strftime("%Y-%m-%d_%H-%M")
+
+    if int(VERBOSE) > 0:
+        print u"DEBUG: Target directory: {}".format(dirname)
+    return dirname
 
 def jump_table(tablename=None, tablelist=None, exclude_mode=False):
     """
@@ -388,164 +585,164 @@ def jump_table(tablename=None, tablelist=None, exclude_mode=False):
     return False
 
 
-def get_tables(con=None, dbname=None, prefix=None, usedate=False, fulldir=None, exclude_mode=False, tables=None):
-    """
-    Retrieve all data from all tables
-    :param con: Database Connection
-    :param dbname: Database name
-    :param prefix:  Database prefix for export directory
-    :param usedate: Use timestamp in output directory
-    :param fulldir: Use a full directory
-    :param exclude_mode:   Exclude?
-    :param tables:  Tables list
-    """
-    global VERBOSE
+# def get_tables(con=None, dbname=None, prefix=None, usedate=False, fulldir=None, exclude_mode=False, tables=None):
+#     """
+#     Retrieve all data from all tables
+#     :param con: Database Connection
+#     :param dbname: Database name
+#     :param prefix:  Database prefix for export directory
+#     :param usedate: Use timestamp in output directory
+#     :param fulldir: Use a full directory
+#     :param exclude_mode:   Exclude?
+#     :param tables:  Tables list
+#     """
+#     global VERBOSE
+#
+#     cur = con.cursor()
+#     dirname = prepare(dbname, prefix, usedate, fulldir)
+#     mkdir(dirname)
+#
+#     if int(VERBOSE) >= 1:
+#         print u"DEBUG: Exclude: {}\nDEBUG: Table List: {}".format(exclude_mode, unicode(tables))
+#
+#     cur.execute("SHOW TABLES")
+#     for table in cur.fetchall():
+#
+#         if jump_table(table.values()[0], tables, exclude_mode):
+#             continue
+#
+#         obj = get_table_ddl(con, table.values()[0])
+#
+#         if int(VERBOSE) >= 1:
+#             print u"DEBUG: Dumping: {}".format(table.values()[0])
+#
+#         lines = get_table_rows(con, table.values()[0])
+#
+#         if int(VERBOSE) >= 3:
+#             count = 1
+#             tot = len(lines)
+#             for line in lines:
+#                 print u"DEBUG:\t      Row {} / {}".format(count, tot)
+#                 count += 1
+#                 for field in line:
+#                     print u"DEBUG:\t\t   Field: {0:30}  Val: {1}".format(field,
+#                                                                          line[field]).encode('utf-8', errors='ignore')
+#
+#         # encoding lines in single object
+#         lines = base64.b64encode(pickle.dumps(lines, pickle.HIGHEST_PROTOCOL))
+#
+#         obj[u'Lines'] = lines
+#
+#         dumptable(dirname + "/" + table.values()[0] + ".obj", obj)
+#     con.close()
 
-    cur = con.cursor()
-    dirname = prepare(dbname, prefix, usedate, fulldir)
-    mkdir(dirname)
 
-    if int(VERBOSE) >= 1:
-        print u"DEBUG: Exclude: {}\nDEBUG: Table List: {}".format(exclude_mode, unicode(tables))
-
-    cur.execute("SHOW TABLES")
-    for table in cur.fetchall():
-
-        if jump_table(table.values()[0], tables, exclude_mode):
-            continue
-
-        obj = get_table_ddl(con, table.values()[0])
-
-        if int(VERBOSE) >= 1:
-            print u"DEBUG: Dumping: {}".format(table.values()[0])
-
-        lines = get_table_rows(con, table.values()[0])
-
-        if int(VERBOSE) >= 3:
-            count = 1
-            tot = len(lines)
-            for line in lines:
-                print u"DEBUG:\t      Row {} / {}".format(count, tot)
-                count += 1
-                for field in line:
-                    print u"DEBUG:\t\t   Field: {0:30}  Val: {1}".format(field,
-                                                                         line[field]).encode('utf-8', errors='ignore')
-
-        # encoding lines in single object
-        lines = base64.b64encode(pickle.dumps(lines, pickle.HIGHEST_PROTOCOL))
-
-        obj[u'Lines'] = lines
-
-        dumptable(dirname + "/" + table.values()[0] + ".obj", obj)
-    con.close()
-
-
-def create_table(con=None, obj=None, exclude_mode=False, tablelist=None):
-    """
-    Restore a table and its data from a previously saved dump
-    :param con: connection Ojbect
-    :param obj: Table object
-    :param exclude_mode: Boolean
-    :param tablelist: List of table to include/exclude
-    :return: None
-    """
-    global VERBOSE
-    cur = con.cursor()
-    tablename = obj[u'Table']
-    tablestatement = obj[u'Create Table']
-
-    if jump_table(tablename, tablelist, exclude_mode):
-        return False
-
-    if int(VERBOSE) >= 1:
-        print u"DEBUG: Restoring: {}".format(tablename)
-
-    safe = """
-        /*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
-        /*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;
-        /*!40101 SET @OLD_COLLATION_CONNECTION=@@COLLATION_CONNECTION */;
-        /*!40101 SET NAMES utf8 */;
-        /*!40103 SET @OLD_TIME_ZONE=@@TIME_ZONE */;
-        /*!40103 SET TIME_ZONE='+00:00' */;
-        /*!40014 SET @OLD_UNIQUE_CHECKS=@@UNIQUE_CHECKS, UNIQUE_CHECKS=0 */;
-        /*!40014 SET @OLD_FOREIGN_KEY_CHECKS=@@FOREIGN_KEY_CHECKS, FOREIGN_KEY_CHECKS=0 */;
-        /*!40101 SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='NO_AUTO_VALUE_ON_ZERO' */; 
-        /*!40111 SET @OLD_SQL_NOTES=@@SQL_NOTES, SQL_NOTES=0 */;
-        """
-    cur.execute(safe)
-
-    safe = """
-    /*!40101 SET @saved_cs_client     = @@character_set_client */;
-    /*!40101 SET character_set_client = utf8 */;
-    """
-    cur.execute("DROP TABLE IF EXISTS `" + tablename + "`;")
-    cur.execute(safe)
-    cur.execute(tablestatement)
-    cur.execute("/*!40101 SET character_set_client = @saved_cs_client */;")
-
-    cur.execute("LOCK TABLES `" + tablename + "` WRITE; /*!40000 ALTER TABLE `" + tablename + "` DISABLE KEYS */;")
-
-    lines = pickle.loads(base64.b64decode(obj[u'Lines']))
-
-    fields = get_table_desc(con, tablename)
-
-    tot = len(lines)
-    ncur = 1
-    for line in lines:
-        query = ""
-        query += "INSERT INTO `" + tablename + "` ( `" + "`,`".join(fields.keys()) + "` ) VALUES ("
-
-        if int(VERBOSE) >= 2:
-            print u"DEBUG:\t      Row {} / {}".format(ncur, tot)
-
-        first = True
-        for field in fields.keys():
-            query += "," if first is False else ""
-            first = False
-
-            if int(VERBOSE) >= 3:
-                print u"DEBUG:\t\t   Field: {0:30}  Val: {1}".format(field, line[field])\
-                    .encode('utf-8', errors='ignore')
-
-            if fields[field] in ("blob", "longblob", "mediumblob"):
-                query += "UNHEX('" + line[field] + "')"
-            elif fields[field] in "date":
-                query += pymysql.converters.escape_date(line[field])
-            else:
-                val = line[field]
-                if isinstance(val, types.NoneType):
-                    query += pymysql.converters.escape_None(val)
-                elif isinstance(val, (int, long)):
-                    query += pymysql.converters.escape_int(val)
-                elif isinstance(val, float):
-                    query += pymysql.converters.escape_float(val)
-                elif isinstance(val, bool):
-                    query += pymysql.converters.escape_bool(val)
-                elif isinstance(val, datetime.datetime):
-                    query += "'" + unicode(val) + "'"
-                elif isinstance(val, types.UnicodeType):
-                    query += pymysql.converters.escape_unicode(val)
-
-        query += ");"
-
-        if int(VERBOSE) >= 4:
-            # noinspection PyBroadException
-            try:
-                print u"DEBUG:\n {}".format(query).encode('utf-8', errors='ignore')
-            except:
-                pass
-
-        try:
-            cur.execute(query.encode('utf-8'))
-        except pymysql.err.ProgrammingError as e:
-            print u"Error executing query: {}".format(e)
-            print u"{}".format(query.encode('utf-8', errors='ignore'))
-            con.close()
-            exit(1)
-
-        ncur += 1
-
-    cur.execute("/*!40000 ALTER TABLE `" + tablename + "` ENABLE KEYS */; UNLOCK TABLES `" + tablename + "`; ")
+# def create_table(con=None, obj=None, exclude_mode=False, tablelist=None):
+#     """
+#     Restore a table and its data from a previously saved dump
+#     :param con: connection Ojbect
+#     :param obj: Table object
+#     :param exclude_mode: Boolean
+#     :param tablelist: List of table to include/exclude
+#     :return: None
+#     """
+#     global VERBOSE
+#     cur = con.cursor()
+#     tablename = obj[u'Table']
+#     tablestatement = obj[u'Create Table']
+#
+#     if jump_table(tablename, tablelist, exclude_mode):
+#         return False
+#
+#     if int(VERBOSE) >= 1:
+#         print u"DEBUG: Restoring: {}".format(tablename)
+#
+#     safe = """
+#         /*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
+#         /*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;
+#         /*!40101 SET @OLD_COLLATION_CONNECTION=@@COLLATION_CONNECTION */;
+#         /*!40101 SET NAMES utf8 */;
+#         /*!40103 SET @OLD_TIME_ZONE=@@TIME_ZONE */;
+#         /*!40103 SET TIME_ZONE='+00:00' */;
+#         /*!40014 SET @OLD_UNIQUE_CHECKS=@@UNIQUE_CHECKS, UNIQUE_CHECKS=0 */;
+#         /*!40014 SET @OLD_FOREIGN_KEY_CHECKS=@@FOREIGN_KEY_CHECKS, FOREIGN_KEY_CHECKS=0 */;
+#         /*!40101 SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='NO_AUTO_VALUE_ON_ZERO' */;
+#         /*!40111 SET @OLD_SQL_NOTES=@@SQL_NOTES, SQL_NOTES=0 */;
+#         """
+#     cur.execute(safe)
+#
+#     safe = """
+#     /*!40101 SET @saved_cs_client     = @@character_set_client */;
+#     /*!40101 SET character_set_client = utf8 */;
+#     """
+#     cur.execute("DROP TABLE IF EXISTS `" + tablename + "`;")
+#     cur.execute(safe)
+#     cur.execute(tablestatement)
+#     cur.execute("/*!40101 SET character_set_client = @saved_cs_client */;")
+#
+#     cur.execute("LOCK TABLES `" + tablename + "` WRITE; /*!40000 ALTER TABLE `" + tablename + "` DISABLE KEYS */;")
+#
+#     lines = pickle.loads(base64.b64decode(obj[u'Lines']))
+#
+#     fields = get_table_desc(con, tablename)
+#
+#     tot = len(lines)
+#     ncur = 1
+#     for line in lines:
+#         query = ""
+#         query += "INSERT INTO `" + tablename + "` ( `" + "`,`".join(fields.keys()) + "` ) VALUES ("
+#
+#         if int(VERBOSE) >= 2:
+#             print u"DEBUG:\t      Row {} / {}".format(ncur, tot)
+#
+#         first = True
+#         for field in fields.keys():
+#             query += "," if first is False else ""
+#             first = False
+#
+#             if int(VERBOSE) >= 3:
+#                 print u"DEBUG:\t\t   Field: {0:30}  Val: {1}".format(field, line[field])\
+#                     .encode('utf-8', errors='ignore')
+#
+#             if fields[field] in ("blob", "longblob", "mediumblob"):
+#                 query += "UNHEX('" + line[field] + "')"
+#             elif fields[field] in "date":
+#                 query += pymysql.converters.escape_date(line[field])
+#             else:
+#                 val = line[field]
+#                 if isinstance(val, types.NoneType):
+#                     query += pymysql.converters.escape_None(val)
+#                 elif isinstance(val, (int, long)):
+#                     query += pymysql.converters.escape_int(val)
+#                 elif isinstance(val, float):
+#                     query += pymysql.converters.escape_float(val)
+#                 elif isinstance(val, bool):
+#                     query += pymysql.converters.escape_bool(val)
+#                 elif isinstance(val, datetime.datetime):
+#                     query += "'" + unicode(val) + "'"
+#                 elif isinstance(val, types.UnicodeType):
+#                     query += pymysql.converters.escape_unicode(val)
+#
+#         query += ");"
+#
+#         if int(VERBOSE) >= 4:
+#             # noinspection PyBroadException
+#             try:
+#                 print u"DEBUG:\n {}".format(query).encode('utf-8', errors='ignore')
+#             except:
+#                 pass
+#
+#         try:
+#             cur.execute(query.encode('utf-8'))
+#         except pymysql.err.ProgrammingError as e:
+#             print u"Error executing query: {}".format(e)
+#             print u"{}".format(query.encode('utf-8', errors='ignore'))
+#             con.close()
+#             exit(1)
+#
+#         ncur += 1
+#
+#     cur.execute("/*!40000 ALTER TABLE `" + tablename + "` ENABLE KEYS */; UNLOCK TABLES `" + tablename + "`; ")
 
 
 def list_fs(path, db, password, user, host, charset, exclude_mode=False, tables=None):
