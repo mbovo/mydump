@@ -11,8 +11,7 @@ import pymysql
 
 VERBOSE = 0
 
-SQL_ST_PRE = """
-/*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
+SQL_ST_PRE = """/*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
 /*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;
 /*!40101 SET @OLD_COLLATION_CONNECTION=@@COLLATION_CONNECTION */;
 /*!40101 SET NAMES utf8 */;
@@ -21,35 +20,31 @@ SQL_ST_PRE = """
 /*!40014 SET @OLD_UNIQUE_CHECKS=@@UNIQUE_CHECKS, UNIQUE_CHECKS=0 */;
 /*!40014 SET @OLD_FOREIGN_KEY_CHECKS=@@FOREIGN_KEY_CHECKS, FOREIGN_KEY_CHECKS=0 */;
 /*!40101 SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='NO_AUTO_VALUE_ON_ZERO' */;
-/*!40111 SET @OLD_SQL_NOTES=@@SQL_NOTES, SQL_NOTES=0 */;
-"""
+/*!40111 SET @OLD_SQL_NOTES=@@SQL_NOTES, SQL_NOTES=0 */;"""
 
-SQL_ST_POST = """
-/*!40101 SET SQL_MODE=@OLD_SQL_MODE */;
+SQL_ST_POST = """/*!40101 SET SQL_MODE=@OLD_SQL_MODE */;
 /*!40014 SET FOREIGN_KEY_CHECKS=@OLD_FOREIGN_KEY_CHECKS */;
 /*!40014 SET UNIQUE_CHECKS=@OLD_UNIQUE_CHECKS */;
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
 /*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
-/*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
-"""
+/*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;"""
 
 SQL_DROP_ST_PRE = """
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
 """
 
-SQL_DROP_ST_POST = """
-/*!40101 SET character_set_client = @saved_cs_client */;
-"""
+SQL_DROP_ST_POST = None
 
 SQL_INSERT_ST_PRE = """
 LOCK TABLES `{}` WRITE;
- /*!40000 ALTER TABLE `{}` DISABLE KEYS */;
-"""
+/*!40000 ALTER TABLE `{}` DISABLE KEYS */;"""
+
 SQL_INSERT_ST_POST = """
 /*!40000 ALTER TABLE `{}` ENABLE KEYS */;
-UNLOCK TABLES `{}`;
+UNLOCK TABLES;
+/*!40101 SET character_set_client = @saved_cs_client */;
 """
 
 
@@ -192,20 +187,25 @@ class Database:
             cur = self._conn.cursor()
             if SQL_DROP_ST_PRE:
                 cur.execute(SQL_DROP_ST_PRE)
+
             try:
-                cur.execute(u"DROP TABLE `{}`;".format(tname))
+                cur.execute(u"DROP TABLE IF EXISTS `{}`;".format(tname))
             except pymysql.err.MySQLError as e:
                 print "Unable to DROP table `{} {}` exception raised".format(tname, e)
+                continue
             try:
                 cur.execute(str(table))
             except pymysql.err.MySQLError as e:
                 print "Unable to CREATE table `{} {}` exception raised".format(tname, e)
+                continue
+
             if SQL_DROP_ST_POST:
                 cur.execute(SQL_DROP_ST_POST)
 
             # restore each row
             if SQL_INSERT_ST_PRE:
                 cur.execute(SQL_INSERT_ST_PRE.format(tname, tname))
+
             for row in table:
                 try:
                     cur.execute(str(row))
@@ -214,9 +214,12 @@ class Database:
                     print "-"*10
                     print row
                     print "-"*10
+                    continue
 
             if SQL_INSERT_ST_POST:
-                cur.execute(unicode(SQL_INSERT_ST_POST.format(tname, tname)))
+                cur.execute(SQL_INSERT_ST_POST.format(tname, tname))
+
+            _ = cur.fetchall()
 
         return len(self._tables), tablelist
 
@@ -559,31 +562,31 @@ def prepare(dbname, prefix="backup_", usedate=False, fulldir=None):
         print u"DEBUG: Target directory: {}".format(dirname)
     return dirname
 
-def jump_table(tablename=None, tablelist=None, exclude_mode=False):
-    """
-    Return boolean if a named table should be included/excluded from the operation performed
-    :param tablename: name of the table
-    :param tablelist: list of table to include/exclude
-    :param exclude_mode: operate in exclude mode
-    :return: Boolean
-    """
-    assert(isinstance(tablename, (str, unicode)))
-    assert(isinstance(tablelist, (list, tuple)))
-
-    if tablelist and isinstance(tablelist, (list, tuple)):
-        if exclude_mode:
-            if tablename in tablelist:
-                # avoid dump of this table,
-                if int(VERBOSE) >= 2:
-                    print u"DEBUG: Ignoring {}".format(tablename)
-                return True
-        else:
-            if tablename not in tablelist:
-                # avoid dump of this table
-                if int(VERBOSE) >= 2:
-                    print u"DEBUG: Ignoring {}".format(tablename)
-                return True
-    return False
+# def jump_table(tablename=None, tablelist=None, exclude_mode=False):
+#     """
+#     Return boolean if a named table should be included/excluded from the operation performed
+#     :param tablename: name of the table
+#     :param tablelist: list of table to include/exclude
+#     :param exclude_mode: operate in exclude mode
+#     :return: Boolean
+#     """
+#     assert(isinstance(tablename, (str, unicode)))
+#     assert(isinstance(tablelist, (list, tuple)))
+#
+#     if tablelist and isinstance(tablelist, (list, tuple)):
+#         if exclude_mode:
+#             if tablename in tablelist:
+#                 # avoid dump of this table,
+#                 if int(VERBOSE) >= 2:
+#                     print u"DEBUG: Ignoring {}".format(tablename)
+#                 return True
+#         else:
+#             if tablename not in tablelist:
+#                 # avoid dump of this table
+#                 if int(VERBOSE) >= 2:
+#                     print u"DEBUG: Ignoring {}".format(tablename)
+#                 return True
+#     return False
 
 
 # def get_tables(con=None, dbname=None, prefix=None, usedate=False, fulldir=None, exclude_mode=False, tables=None):
@@ -745,34 +748,34 @@ def jump_table(tablename=None, tablelist=None, exclude_mode=False):
 #
 #     cur.execute("/*!40000 ALTER TABLE `" + tablename + "` ENABLE KEYS */; UNLOCK TABLES `" + tablename + "`; ")
 
-
-def list_fs(path, db, password, user, host, charset, exclude_mode=False, tables=None):
-    """
-    List filesystem path and try to restore every object found as table in database
-    :param path: fs path
-    :param db: database name
-    :param password: user password
-    :param user: username
-    :param host: hostname
-    :param charset: charset used in connection
-    :param exclude_mode: boolean
-    :param tables: list of tables
-    :return: None
-    """
-    if int(VERBOSE) >= 1:
-        print u"DEBUG: Exclude: {}\nDEBUG: Table List: {}".format(exclude_mode, unicode(tables))
-
-    if not checkdir(path):
-        print u"ERROR:\t Target directory doesn't exists: {}".format(path)
-        return
-
-    for dirname, dirnames, filenames in os.walk(path):
-        for filename in filenames:
-            obj = loadtable(os.path.join(dirname, filename))
-            con = open_db(host, db, user, password, charset)
-            assert (isinstance(con, pymysql.connections.Connection))
-            create_table(con, obj, exclude_mode, tables)
-            con.close()
+#
+# def list_fs(path, db, password, user, host, charset, exclude_mode=False, tables=None):
+#     """
+#     List filesystem path and try to restore every object found as table in database
+#     :param path: fs path
+#     :param db: database name
+#     :param password: user password
+#     :param user: username
+#     :param host: hostname
+#     :param charset: charset used in connection
+#     :param exclude_mode: boolean
+#     :param tables: list of tables
+#     :return: None
+#     """
+#     if int(VERBOSE) >= 1:
+#         print u"DEBUG: Exclude: {}\nDEBUG: Table List: {}".format(exclude_mode, unicode(tables))
+#
+#     if not checkdir(path):
+#         print u"ERROR:\t Target directory doesn't exists: {}".format(path)
+#         return
+#
+#     for dirname, dirnames, filenames in os.walk(path):
+#         for filename in filenames:
+#             obj = loadtable(os.path.join(dirname, filename))
+#             con = open_db(host, db, user, password, charset)
+#             assert (isinstance(con, pymysql.connections.Connection))
+#             create_table(con, obj, exclude_mode, tables)
+#             con.close()
 
 
 def _build_parser():
@@ -807,38 +810,63 @@ def _build_parser():
     return parser
 
 
+# def _old_parse_command(parser=None):
+#     global VERBOSE
+#     assert isinstance(parser, argparse.ArgumentParser)
+#     args = parser.parse_args()
+#
+#     if len(sys.argv) < 1:
+#         parser.print_help()
+#         return 1
+#
+#     args.dbname = args.dbname[0]
+#
+#     exclude_mode = args.exclude
+#
+#     VERBOSE = args.verbose
+#
+#     if int(VERBOSE) > 0:
+#         print u"DEBUG: Verbose {}\nDEBUG: MYDBC URL: {}:{}@:/{}".format(VERBOSE, args.user, args.password, args.host,
+#                                                                          args.dbname)
+#
+#     if args.restore:
+#         list_fs(prepare(args.dbname, args.prefix, args.timestamp, args.target),
+#                 db=args.dbname, password=args.password, user=args.user, host=args.host, charset=args.charset,
+#                 exclude_mode=exclude_mode, tables=args.tables)
+#         return 0
+#
+#     if args.dump:
+#         get_tables(open_db(db=args.dbname, password=args.password, user=args.user, host=args.host, charset=args.charset)
+#                    , args.dbname, args.prefix, args.timestamp, args.target, exclude_mode, args.tables)
+#
+#     return 0
+
+
 def _parse_command(parser=None):
     global VERBOSE
     assert isinstance(parser, argparse.ArgumentParser)
     args = parser.parse_args()
 
     if len(sys.argv) < 1:
-        parser.print_help()
+        parse.print_help()
         return 1
-
-    # TODO: only one db at time is supported for now
     args.dbname = args.dbname[0]
-
-    exclude_mode = args.exclude
 
     VERBOSE = args.verbose
 
-    if int(VERBOSE) > 0:
-        print u"DEBUG: Verbose {}\nDEBUG: MYDBC URL: {}:{}@:/{}".format(VERBOSE, args.user, args.password, args.host,
-                                                                         args.dbname)
+    db = Database(host=args.host,
+                  db=args.dbname,
+                  user=args.user,
+                  password=args.password,
+                  charset=args.charset
+                  )
+
+    path = prepare(args.dbname, args.prefix, args.timestamp, args.target)
 
     if args.restore:
-        list_fs(prepare(args.dbname, args.prefix, args.timestamp, args.target),
-                db=args.dbname, password=args.password, user=args.user, host=args.host, charset=args.charset,
-                exclude_mode=exclude_mode, tables=args.tables)
-        return 0
-
+        db.restore(path=path, tablelist=args.tables, exclude=args.exclude)
     if args.dump:
-        get_tables(open_db(db=args.dbname, password=args.password, user=args.user, host=args.host, charset=args.charset)
-                   , args.dbname, args.prefix, args.timestamp, args.target, exclude_mode, args.tables)
-
-    return 0
-
+        db.dump(dirname=path,tablelist=args.tables,exclude=args.exclude)
 
 if __name__ == "__main__":
     exit(_parse_command(_build_parser()))
