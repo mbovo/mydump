@@ -7,10 +7,16 @@ import os
 import pickle
 import sys
 import types
+import struct
 
 import pymysql
 
 VERBOSE = 0
+
+
+def convert_bit(b):
+    b = "\x00" * (8 - len(b)) + b # pad w/ zeroes
+    return struct.unpack(">Q", b)[0]
 
 
 def mkdir(dirname):
@@ -101,12 +107,15 @@ def open_db(host='localhost', db='', user='root', password='', charset='utf8'):
     :param charset: used charset
     :return: connection object
     """
+    conv = pymysql.converters.conversions
+    conv[pymysql.FIELD_TYPE.BIT] = convert_bit
+
     con = pymysql.connect(host=host,
                           user=user,
                           password=password,
                           db=db,
                           charset=charset,
-                          cursorclass=pymysql.cursors.DictCursor)
+                          cursorclass=pymysql.cursors.DictCursor, conv=conv)
     return con
 
 
