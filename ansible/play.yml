@@ -1,7 +1,29 @@
 ---
 - hosts: local
   tasks:
-    - name: "test module"
-      mytest: username="pippo"
+    - name: "Dump of database arriva-tr-fportal"
+      mydump: 
+        db: "arriva-tr-fportal" 
+        user: "root" 
+        password: "asdf10" 
+        path: "./test"
+#        exclude: true 
+        tables:
+          - AssetEntry
+          - Barbatrucco
+      register: res
 
+    - debug: var=res
 
+    - name: "Restore of database arriva-tr-fportal"
+      mydump: 
+        action: restore
+        db: "arriva-tr-fportal" 
+        user: "root" 
+        password: "asdf10" 
+        path: "./test" 
+        tables:
+          - AssetEntry
+      register: res
+
+    - debug: var=res

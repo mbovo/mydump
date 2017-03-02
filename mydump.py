@@ -129,10 +129,6 @@ class Database:
     def __len__(self):
         return len(self._tablenames)
 
-    def __del__(self):
-        self._conn.close()
-        del self._tablenames
-
     def __fetch_n_dump(self, tablelist=None, exclude=False, dump=False, refetch=True, dirname=None ):
 
         # use the whole list  or choose
@@ -539,23 +535,28 @@ def _parse_command(parser=None):
     assert isinstance(parser, argparse.ArgumentParser)
     args = parser.parse_args()
 
-    if len(sys.argv) < 1:
-        parse.print_help()
-        return 1
+#    if len(sys.argv) < 1:
+#        parse.print_help()
+#        return 1
     args.dbname = args.dbname[0]
 
     VERBOSE = args.verbose
 
     # patching for bit conversion
-    conv = pymysql.converters.conversions
-    conv[pymysql.FIELD_TYPE.BIT] = convert_bit
+    convert_matrix = pymysql.converters.conversions
+    convert_matrix[pymysql.FIELD_TYPE.BIT] = convert_bit
 
-    db = Database(host=args.host,
-                  db=args.dbname,
-                  user=args.user,
-                  password=args.password,
-                  charset=args.charset,
-                  conv=conv)
+    try:
+        db = Database(host=args.host,
+                      db=args.dbname,
+                      user=args.user,
+                      password=args.password,
+                      charset=args.charset,
+                      conv=convert_matrix)
+    except pymysql.err.MySQLError as e:
+        print e
+        os.abort()
+
 
     path = prepare(args.dbname, args.prefix, args.timestamp, args.target)
 
@@ -564,5 +565,64 @@ def _parse_command(parser=None):
     if args.dump:
         db.dump(dirname=path,tablelist=args.tables,exclude=args.exclude)
 
+
+from ansible.module_utils.basic import *
+
+fields = {
+    "action": {
+        "default": "dump",
+        "choices": ["dump", "restore"],
+        "type": "str"
+    },
+    "db": {"required": True, "type": "str"},
+    "host": {"required": False, "default": "localhost", "type": "str"},
+    "user": {"required": True, "type": "str"},
+    "path": {"required": True, "type": "str"},
+    "password": {"required": True, "type": "str"},
+    "charset": {"required": False, "default": "utf8", "type": "str"},
+    "prefix": {"required": False, "default": "backup_", "type": "str"},
+    "timestamp": {"required": False, "default": False, "type": "bool"},
+    "exclude": {"required": False, "default": False, "type": "bool"},
+    "tables": {"required": False, "default": None, "type": "list"}
+}
+
+
+def main():
+
+    if len(sys.argv) > 1:
+        _parse_command(_build_parser())
+        return
+
+    m = AnsibleModule(argument_spec=fields)
+
+    convert_matrix = pymysql.converters.conversions
+    convert_matrix[pymysql.FIELD_TYPE.BIT] = convert_bit
+
+    args = m.params
+
+    try:
+        db = Database(host=args['host'],
+                      db=args['db'],
+                      user=args['user'],
+                      password=args['password'],
+                      charset=args['charset'],
+                      conv=convert_matrix)
+    except pymysql.err.MySQLError as e:
+        m.fail_json(msg=str(e))
+
+    path = prepare(args['db'], args['prefix'], args['timestamp'], args['path'])
+
+    try:
+        if "restore" in args['action']:
+            db.restore(path=path, tablelist=args['tables'], exclude=args['exclude'])
+        if "dump" in args['action']:
+            db.dump(dirname=path, tablelist=args['tables'], exclude=args['exclude'])
+    except pymysql.err.MySQLError as e:
+        m.fail_json(msg=str(e))
+
+    m.exit_json(changed=True, meta=m.params)
+
+
 if __name__ == "__main__":
-    exit(_parse_command(_build_parser()))
+    #exit(_parse_command(_build_parser()))
+    main()
