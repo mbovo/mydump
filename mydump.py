@@ -35,14 +35,15 @@ SQL_ST_POST = """
 """
 
 SQL_DROP_ST_PRE = """
-#     /*!40101 SET @saved_cs_client     = @@character_set_client */;
-#     /*!40101 SET character_set_client = @saved_cs_client */;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
 """
 
-SQL_DROP_ST_POST = None
+SQL_DROP_ST_POST = """
+/*!40101 SET character_set_client = @saved_cs_client */;
+"""
 
 SQL_INSERT_ST_PRE = """
-/*!40101 SET character_set_client = utf8 */;
 LOCK TABLES `{}` WRITE;
  /*!40000 ALTER TABLE `{}` DISABLE KEYS */;
 """
