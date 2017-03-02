@@ -1,6 +1,5 @@
 #!/usr/bin/env python2
 
-import argparse
 import datetime
 import os
 import pickle
@@ -9,6 +8,9 @@ import types
 import struct
 
 import pymysql
+
+if sys.version_info > (2, 7):
+    import argparse
 
 VERBOSE = 0
 
@@ -39,11 +41,11 @@ SQL_DROP_ST_PRE = """
 SQL_DROP_ST_POST = None
 
 SQL_INSERT_ST_PRE = """
-LOCK TABLES `{}` WRITE;
-/*!40000 ALTER TABLE `{}` DISABLE KEYS */;"""
+LOCK TABLES `{0}` WRITE;
+/*!40000 ALTER TABLE `{0}` DISABLE KEYS */;"""
 
 SQL_INSERT_ST_POST = """
-/*!40000 ALTER TABLE `{}` ENABLE KEYS */;
+/*!40000 ALTER TABLE `{0}` ENABLE KEYS */;
 UNLOCK TABLES;
 /*!40101 SET character_set_client = @saved_cs_client */;
 """
@@ -80,7 +82,7 @@ class Database:
                                      ssl=ssl,
                                      cursorclass=cursorclass)
         self._dbname = db
-        self._odbc = "{}:{}@{}/{}".format(user, password, host, db)
+        self._odbc = "{0}:{1}@{2}/{3}".format(user, password, host, db)
         self._tablenames = list()
         self._tables = dict()
         self._charset = charset
@@ -115,7 +117,7 @@ class Database:
 
     def __getitem__(self, item):
         if item not in self:
-            raise ValueError("Table {} not found in database".format(item))
+            raise ValueError("Table {0} not found in database".format(item))
         if item not in self._tables:
             table = Table(item, self._conn)
             self._tables[item] = table
@@ -186,14 +188,14 @@ class Database:
                 cur.execute(SQL_DROP_ST_PRE)
 
             try:
-                cur.execute(u"DROP TABLE IF EXISTS `{}`;".format(tname))
+                cur.execute(u"DROP TABLE IF EXISTS `{0}`;".format(tname))
             except pymysql.err.MySQLError as e:
-                print "Unable to DROP table `{} {}` exception raised".format(tname, e)
+                print "Unable to DROP table `{0} {1}` exception raised".format(tname, e)
                 continue
             try:
                 cur.execute(str(table))
             except pymysql.err.MySQLError as e:
-                print "Unable to CREATE table `{} {}` exception raised".format(tname, e)
+                print "Unable to CREATE table `{0} {1}` exception raised".format(tname, e)
                 continue
 
             if SQL_DROP_ST_POST:
@@ -207,7 +209,7 @@ class Database:
                 try:
                     cur.execute(str(row))
                 except pymysql.err.MySQLError as e:
-                    print "Unable to INSERT INTO table `{} {}` exception raised".format(tname, e)
+                    print "Unable to INSERT INTO table `{0} {1}` exception raised".format(tname, e)
                     print "-"*10
                     print row
                     print "-"*10
@@ -339,7 +341,7 @@ class Table:
             pickle.dump(self, f, pickle.HIGHEST_PROTOCOL)
             f.close()
         except pickle.UnpicklingError as e:
-            print u"ERROR: Unable to save object to file [{}] : {}".format(filename, repr(e))
+            print u"ERROR: Unable to save object to file [{0}] : {1}".format(filename, repr(e))
 
     def load(self, filename):
         """
@@ -352,7 +354,7 @@ class Table:
             self = pickle.load(f)
             f.close()
         except Exception as e:
-            print u"ERROR: Unable to load object from file: [{}] : {}".format(filename, repr(e))
+            print u"ERROR: Unable to load object from file: [{0}] : {1}".format(filename, repr(e))
             sys.exit(20)
         return self
 
@@ -405,7 +407,7 @@ class Row:
         query += "INSERT INTO `" + self._tablename + "` ( `" + "`,`".join(fields.keys()) + "` ) VALUES ("
 
         if int(VERBOSE) >= 2:
-            print u"DEBUG:\t      Row {} / {}".format(ncur, tot)
+            print u"DEBUG:\t      Row {0} / {1}".format(ncur, tot)
 
         first = True
         for field in fields.keys():
@@ -440,7 +442,7 @@ class Row:
         if int(VERBOSE) >= 4:
             # noinspection PyBroadException
             try:
-                print u"DEBUG:\n {}".format(query).encode(self._charset, errors='ignore')
+                print u"DEBUG:\n {0}".format(query).encode(self._charset, errors='ignore')
             except:
                 pass
         return query
@@ -450,12 +452,12 @@ def mkdir(dirname):
     try:
         if os.path.isdir(dirname):
             if int(VERBOSE)>0:
-                print u"DEBUG:\tTarget directory already exists {}".format(dirname)
+                print u"DEBUG:\tTarget directory already exists {0}".format(dirname)
             return False
         os.mkdir(dirname)
         return True
     except OSError as e:
-        print u"ERROR:\tError creating directory on {} : {}".format(dirname, e.strerror)
+        print u"ERROR:\tError creating directory on {0} : {1}".format(dirname, e.strerror)
         sys.exit(4)
 
 
@@ -466,7 +468,7 @@ def checkdir(dirname):
         else:
             return False
     except OSError as e:
-        print u"ERROR:\t Unable to check if {} is a directory: {}".format(dirname, e.strerror)
+        print u"ERROR:\t Unable to check if {0} is a directory: {1}".format(dirname, e.strerror)
 
 
 def prepare(dbname, prefix="backup_", usedate=False, fulldir=None):
@@ -489,7 +491,7 @@ def prepare(dbname, prefix="backup_", usedate=False, fulldir=None):
             dirname += "_" + now.strftime("%Y-%m-%d_%H-%M")
 
     if int(VERBOSE) > 0:
-        print u"DEBUG: Target directory: {}".format(dirname)
+        print u"DEBUG: Target directory: {0}".format(dirname)
     return dirname
 
 
@@ -497,73 +499,74 @@ def convert_bit(b):
     b = "\x00" * (8 - len(b)) + b # pad w/ zeroes
     return struct.unpack(">Q", b)[0]
 
+if sys.version_info > (2, 7):
 
-def _build_parser():
-    parser = argparse.ArgumentParser(prog="mydump")
+    def _build_parser():
+        parser = argparse.ArgumentParser(prog="mydump")
 
-    g1 = parser.add_mutually_exclusive_group(required=False)
-    g1.add_argument("-d", "--dump", action="store_true", default=True, help="Dump database to disk (default)")
-    g1.add_argument("-r", "--restore", action="store_true", default=False, help="Restore database from disk")
+        g1 = parser.add_mutually_exclusive_group(required=False)
+        g1.add_argument("-d", "--dump", action="store_true", default=True, help="Dump database to disk (default)")
+        g1.add_argument("-r", "--restore", action="store_true", default=False, help="Restore database from disk")
 
-    parser.add_argument("-H", "--host", default="localhost", help="Database host (default: localhost)")
-    parser.add_argument("-c", "--charset", default="utf8", help="Database and output charset (default: UTF8)")
-    parser.add_argument("-o", "--target", default=None, help="Target directory (default: $prefix_$dbname)")
-    parser.add_argument("-P", "--prefix", default="backup_", help="Prefix of destination directory (default: backup_ )")
-    parser.add_argument("-t", "--timestamp", action="store_true",
-                        help="Use timestamp in destination directory (default: false )")
+        parser.add_argument("-H", "--host", default="localhost", help="Database host (default: localhost)")
+        parser.add_argument("-c", "--charset", default="utf8", help="Database and output charset (default: UTF8)")
+        parser.add_argument("-o", "--target", default=None, help="Target directory (default: $prefix_$dbname)")
+        parser.add_argument("-P", "--prefix", default="backup_", help="Prefix of destination directory (default: backup_ )")
+        parser.add_argument("-t", "--timestamp", action="store_true",
+                            help="Use timestamp in destination directory (default: false )")
 
-    g2 = parser.add_mutually_exclusive_group(required=False)
-    g2.add_argument("-i", "--include", action="store_false", help="Explicitly dump only the specified tables")
-    g2.add_argument("-e", "--exclude", action="store_true", help="Exclude specified tables from dump")
+        g2 = parser.add_mutually_exclusive_group(required=False)
+        g2.add_argument("-i", "--include", action="store_false", help="Explicitly dump only the specified tables")
+        g2.add_argument("-e", "--exclude", action="store_true", help="Exclude specified tables from dump")
 
-    parser.add_argument("-u", "--user", help="Database Username", required=True)
-    parser.add_argument("-p", "--password", help="Database Password", required=True)
+        parser.add_argument("-u", "--user", help="Database Username", required=True)
+        parser.add_argument("-p", "--password", help="Database Password", required=True)
 
-    parser.add_argument("-v", "--verbose", default=0, help="Be Verbose")
+        parser.add_argument("-v", "--verbose", default=0, help="Be Verbose")
 
-    parser.add_argument("dbname", nargs=1, type=str, help="Database name")
+        parser.add_argument("dbname", nargs=1, type=str, help="Database name")
 
-    parser.add_argument("tables", nargs="*", type=unicode, default=None, help="Table name to include in dump "
-                                                                              "(default everything)")
+        parser.add_argument("tables", nargs="*", type=unicode, default=None, help="Table name to include in dump "
+                                                                                  "(default everything)")
 
-    assert isinstance(parser, object)
-    return parser
-
-
-def _parse_command(parser=None):
-    global VERBOSE
-    assert isinstance(parser, argparse.ArgumentParser)
-    args = parser.parse_args()
-
-#    if len(sys.argv) < 1:
-#        parse.print_help()
-#        return 1
-    args.dbname = args.dbname[0]
-
-    VERBOSE = args.verbose
-
-    # patching for bit conversion
-    convert_matrix = pymysql.converters.conversions
-    convert_matrix[pymysql.FIELD_TYPE.BIT] = convert_bit
-
-    try:
-        db = Database(host=args.host,
-                      db=args.dbname,
-                      user=args.user,
-                      password=args.password,
-                      charset=args.charset,
-                      conv=convert_matrix)
-    except pymysql.err.MySQLError as e:
-        print e
-        os.abort()
+        assert isinstance(parser, object)
+        return parser
 
 
-    path = prepare(args.dbname, args.prefix, args.timestamp, args.target)
+    def _parse_command(parser=None):
+        global VERBOSE
+        assert isinstance(parser, argparse.ArgumentParser)
+        args = parser.parse_args()
 
-    if args.restore:
-        db.restore(path=path, tablelist=args.tables, exclude=args.exclude)
-    if args.dump:
-        db.dump(dirname=path,tablelist=args.tables,exclude=args.exclude)
+    #    if len(sys.argv) < 1:
+    #        parse.print_help()
+    #        return 1
+        args.dbname = args.dbname[0]
+
+        VERBOSE = args.verbose
+
+        # patching for bit conversion
+        convert_matrix = pymysql.converters.conversions
+        convert_matrix[pymysql.FIELD_TYPE.BIT] = convert_bit
+
+        try:
+            db = Database(host=args.host,
+                          db=args.dbname,
+                          user=args.user,
+                          password=args.password,
+                          charset=args.charset,
+                          conv=convert_matrix)
+        except pymysql.err.MySQLError as e:
+            print e
+            os.abort()
+
+
+        path = prepare(args.dbname, args.prefix, args.timestamp, args.target)
+
+        if args.restore:
+            db.restore(path=path, tablelist=args.tables, exclude=args.exclude)
+        if args.dump:
+            db.dump(dirname=path,tablelist=args.tables,exclude=args.exclude)
 
 
 from ansible.module_utils.basic import *
@@ -589,9 +592,10 @@ fields = {
 
 def main():
 
-    if len(sys.argv) > 1:
-        _parse_command(_build_parser())
-        return
+    if sys.version_info > (2, 7):
+        if len(sys.argv) > 1:
+            parse_command(_build_parser())
+            return
 
     m = AnsibleModule(argument_spec=fields)
 

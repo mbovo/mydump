@@ -1,29 +1,28 @@
 ---
-- hosts: local
+- hosts: "{{myhost}}"
   tasks:
-    - name: "Dump of database arriva-tr-fportal"
+    - name: "Dump of database fportal"
       mydump: 
-        db: "arriva-tr-fportal" 
+        db: "g7-fportal" 
         user: "root" 
         password: "asdf10" 
-        path: "./test"
+        path: "./g7fportal"
 #        exclude: true 
-        tables:
-          - AssetEntry
-          - Barbatrucco
+#        tables:
+#          - AssetEntry
       register: res
 
     - debug: var=res
-
-    - name: "Restore of database arriva-tr-fportal"
+    
+    - name: "Dump of database fserver"
       mydump: 
-        action: restore
-        db: "arriva-tr-fportal" 
+        db: "g7-fserver" 
         user: "root" 
         password: "asdf10" 
-        path: "./test" 
-        tables:
-          - AssetEntry
+        path: "./g7fserver"
+#        exclude: true 
+#        tables:
+#          - AssetEntry
       register: res
 
     - debug: var=res
