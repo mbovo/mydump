@@ -219,7 +219,7 @@ class Database:
 
             for row in table:
                 try:
-                    cur.execute(str(row))
+                    cur.execute(row.encode('utf-8'))
                 except pymysql.err.MySQLError as e:
                     print "Unable to INSERT INTO table `{0} {1}` exception raised".format(tname, e)
                     print "-"*10
@@ -234,7 +234,6 @@ class Database:
 
         return len(self._tables), tablelist
 
-
 class Table:
 
     _tablename = None
@@ -242,6 +241,7 @@ class Table:
     _desc = dict()
     _ddl = dict()
     _charset = 'utf-8'
+    _pos=0
 
     def __init__(self, tablename="", conn=None, charset=None):
         if not conn or not isinstance(conn, pymysql.connections.Connection):
@@ -254,9 +254,12 @@ class Table:
         self._desc = self._get_desc(conn)
         self._ddl = self._get_ddl(conn)
         self._rows = []
+        self._pos = 0
 
         for row in self._get_rows(conn):
-            self._rows.append(Row(row, self._desc, tablename))
+            #self._rows.append(Row(row, self._desc, tablename))
+            #self._rows.append( self._get_row_ddl(row ))
+            self._rows.append(row)
 
     def __str__(self):
         return self._ddl[u'Create Table']
@@ -277,13 +280,24 @@ class Table:
 
     def __getitem__(self, item):
         if item < len(self._rows):
-            return self._rows[item]
+            return self._get_row_ddl(self._rows[item])
 
     def __len__(self):
         return len(self._rows)
 
     def __iter__(self):
-        return self._rows.__iter__()
+        return self
+
+    def next(self):
+        if self._pos < len(self._rows):
+            i = self._get_row_ddl(self._rows[self._pos])
+            self._pos += 1
+            return i
+        else:
+            raise StopIteration()
+
+    def __next__(self):
+        return self.next()
 
     def rows(self):
         return self._rows
@@ -319,7 +333,7 @@ class Table:
             desc[field[u'Field']] = field[u'Type']
         return desc
 
-    def _get_rows(self,conn):
+    def _get_rows(self, conn):
         tablename = self._tablename
         fields = self._desc
 
@@ -340,6 +354,52 @@ class Table:
         cur.execute(query)
 
         return cur.fetchall()
+
+    def _get_row_ddl(self,row):
+        query = ""
+        fields = self._desc
+        query += "INSERT INTO `" + self._tablename + "` ( `" + "`,`".join(fields.keys()) + "` ) VALUES ("
+
+        #if int(VERBOSE) >= 2:
+        #    print u"DEBUG:\t      Row {0} / {1}".format(ncur, tot)
+
+        first = True
+        for field in fields.keys():
+            query += "," if first is False else ""
+            first = False
+
+            if int(VERBOSE) >= 3:
+                print u"DEBUG:\t\t   Field: {0:30}  Val: {1}".format(field, self._element[field]) \
+                    .encode('utf-8', errors='ignore')
+
+            if fields[field] in ("blob", "longblob", "mediumblob"):
+                query += "UNHEX('" + row[field] + u"')"
+            elif fields[field] in "date":
+                query += pymysql.converters.escape_date(row[field])
+            else:
+                val = row[field]
+                if isinstance(val, types.NoneType):
+                    query += pymysql.converters.escape_None(val)
+                elif isinstance(val, (int, long)):
+                    query += pymysql.converters.escape_int(val)
+                elif isinstance(val, float):
+                    query += pymysql.converters.escape_float(val)
+                elif isinstance(val, bool):
+                    query += pymysql.converters.escape_bool(val)
+                elif isinstance(val, datetime.datetime):
+                    query += "'" + unicode(val) + "'"
+                elif isinstance(val, types.UnicodeType):
+                    query += pymysql.converters.escape_unicode(val)
+
+        query += ");"
+
+        # if int(VERBOSE) >= 4:
+        #     # noinspection PyBroadException
+        #     try:
+        #         print u"DEBUG:\n {0}".format(query).encode(self._charset, errors='ignore')
+        #     except:
+        #         pass
+        return query
 
     def dump(self, filename):
         """
@@ -364,100 +424,12 @@ class Table:
         try:
             f = open(filename, "rb")
             self = pickle.load(f)
+            self._pos = 0
             f.close()
         except Exception as e:
             print u"ERROR: Unable to load object from file: [{0}] : {1}".format(filename, repr(e))
             sys.exit(20)
         return self
-
-
-class Row:
-
-    _element = dict()
-    _desc = dict()
-    _tablename = None
-    _charset = "utf-8"
-
-    def __init__(self, row=dict(), desc=dict(), tablename="", charset="utf-8"):
-        self._element = row
-        self._desc = desc
-        self._tablename = tablename
-        self._charset = charset
-
-    def __str__(self):
-        return self._get_ddl().encode(self._charset)
-
-    def __contains__(self, item):
-        return item in self._element
-
-    def __eq__(self, other):
-        if not isinstance(other, Row):
-            return False
-        if cmp(self.dict(), other.dict()) == 0:
-            return True
-        return False
-
-    def __getitem__(self, item):
-        if item in self:
-            return self._element[item]
-
-    def dict(self):
-        return self._element
-
-    def __unicode__(self):
-        return self._get_ddl().encode(self._charset)
-
-    def __len__(self):
-        return len(self._element)
-
-    def __iter__(self):
-        return self._element.__iter__()
-
-    def _get_ddl(self):
-        query = ""
-        fields = self._desc
-        query += "INSERT INTO `" + self._tablename + "` ( `" + "`,`".join(fields.keys()) + "` ) VALUES ("
-
-        if int(VERBOSE) >= 2:
-            print u"DEBUG:\t      Row {0} / {1}".format(ncur, tot)
-
-        first = True
-        for field in fields.keys():
-            query += "," if first is False else ""
-            first = False
-
-            if int(VERBOSE) >= 3:
-                print u"DEBUG:\t\t   Field: {0:30}  Val: {1}".format(field, self._element[field]) \
-                    .encode('utf-8', errors='ignore')
-
-            if fields[field] in ("blob", "longblob", "mediumblob"):
-                query += "UNHEX('" + self._element[field] + u"')"
-            elif fields[field] in "date":
-                query += pymysql.converters.escape_date(self._element[field])
-            else:
-                val = self._element[field]
-                if isinstance(val, types.NoneType):
-                    query += pymysql.converters.escape_None(val)
-                elif isinstance(val, (int, long)):
-                    query += pymysql.converters.escape_int(val)
-                elif isinstance(val, float):
-                    query += pymysql.converters.escape_float(val)
-                elif isinstance(val, bool):
-                    query += pymysql.converters.escape_bool(val)
-                elif isinstance(val, datetime.datetime):
-                    query += "'" + unicode(val) + "'"
-                elif isinstance(val, types.UnicodeType):
-                    query += pymysql.converters.escape_unicode(val)
-
-        query += ");"
-
-        if int(VERBOSE) >= 4:
-            # noinspection PyBroadException
-            try:
-                print u"DEBUG:\n {0}".format(query).encode(self._charset, errors='ignore')
-            except:
-                pass
-        return query
 
 
 def mkdir(dirname):
@@ -577,6 +549,7 @@ if sys.version_info > (2, 7):
 
         if args.restore:
             db.restore(path=path, tablelist=args.tables, exclude=args.exclude)
+            return
         if args.dump:
             db.dump(dirname=path,tablelist=args.tables,exclude=args.exclude)
 
@@ -606,7 +579,7 @@ def main():
 
     if sys.version_info > (2, 7):
         if len(sys.argv) > 1:
-            parse_command(_build_parser())
+            _parse_command(_build_parser())
             return
 
     m = AnsibleModule(argument_spec=fields)
