@@ -1,4 +1,16 @@
 #!/usr/bin/env python2
+# -*- coding: UTF-8 -*-
+
+"""
+Pure python implementation of mysqldump utility as ansible module (and standalone script for python>2.7)
+This code uses pymysql 3d party library
+"""
+
+__author__ = "Manuel Bovo <mbovo@facilitylive.com>"
+__license__ = "MIT"
+__version__ = "2.1.0"
+__email__ = "mbovo@facilitylive.com"
+__copyright__ = "Copyright (c) 2017 Facilitylive OpCo Srl"
 
 import datetime
 import os

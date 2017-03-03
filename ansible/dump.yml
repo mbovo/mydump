@@ -1,0 +1,15 @@
+---
+- hosts: "{{myhost}}"
+  tasks:
+    - name: "Dump of database {{dbname}}"
+      mydump: 
+        db: "{{dbname}}" 
+        user: "root" 
+        password: "asdf10" 
+        path: "./{{dbname}}"
+#        exclude: true 
+#        tables:
+#          - AssetEntry
+      register: res
+
+    - debug: var=res
