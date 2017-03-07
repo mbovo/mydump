@@ -18,6 +18,7 @@ import pickle
 import sys
 import types
 import struct
+import tarfile
 
 import pymysql
 
@@ -170,13 +171,31 @@ class Database:
     def fetch(self, tablelist=None, exclude=False):
         return self.__fetch_n_dump(tablelist, exclude)
 
-    def dump(self, dirname=None, tablelist=None, exclude=False, refetch=True):
-        mkdir(dirname)
-        self.__fetch_n_dump(tablelist, exclude, dump=True, refetch=refetch, dirname=dirname)
+    def archive(self, path, filename):
+        old_dir = os.getcwd()
+        tar = tarfile.open(filename, 'w:gz')
+        os.chdir(tempfile.tempdir)
+        tar.add(os.path.basename(path))
+        tar.close()
+        os.chdir(old_dir)
 
-    def restore(self, path=None, tablelist=None, exclude=False):
-        # load list of filename
-        checkdir(path)
+    def unarchive(self, filename, path):
+        tar = tarfile.open(filename,'r:gz')
+        tar.extractall(path)
+        tar.close()
+        return path
+
+    def dump(self, filename=None, tablelist=None, exclude=False, refetch=True):
+        dirname = tempfile.mkdtemp(dir=tempfile.tempdir)
+        self.__fetch_n_dump(tablelist, exclude, dump=True, refetch=refetch, dirname=dirname)
+        self.archive(dirname, filename)
+        shutil.rmtree(dirname)
+
+    def restore(self, filename=None, tablelist=None, exclude=False):
+
+        path = tempfile.mkdtemp(dir=tempfile.tempdir)
+        print self.unarchive(filename, path)
+
         tables_on_fs = list()
         for dirname, dirnames, filenames in os.walk(path):
             for filename in filenames:
@@ -232,6 +251,7 @@ class Database:
 
             _ = cur.fetchall()
 
+        shutil.rmtree(path)
         return len(self._tables), tablelist
 
 class Table:
@@ -431,30 +451,6 @@ class Table:
             sys.exit(20)
         return self
 
-
-def mkdir(dirname):
-    try:
-        if os.path.isdir(dirname):
-            if int(VERBOSE)>0:
-                print u"DEBUG:\tTarget directory already exists {0}".format(dirname)
-            return False
-        os.mkdir(dirname)
-        return True
-    except OSError as e:
-        print u"ERROR:\tError creating directory on {0} : {1}".format(dirname, e.strerror)
-        sys.exit(4)
-
-
-def checkdir(dirname):
-    try:
-        if os.path.isdir(dirname):
-            return True
-        else:
-            return False
-    except OSError as e:
-        print u"ERROR:\t Unable to check if {0} is a directory: {1}".format(dirname, e.strerror)
-
-
 def prepare(dbname, prefix="backup_", usedate=False, fulldir=None):
     """
 
@@ -544,14 +540,13 @@ if sys.version_info > (2, 7):
             print e
             os.abort()
 
-
-        path = prepare(args.dbname, args.prefix, args.timestamp, args.target)
+        path = args.target
 
         if args.restore:
-            db.restore(path=path, tablelist=args.tables, exclude=args.exclude)
+            db.restore(filename=path, tablelist=args.tables, exclude=args.exclude)
             return
         if args.dump:
-            db.dump(dirname=path,tablelist=args.tables,exclude=args.exclude)
+            db.dump(filename=path,tablelist=args.tables,exclude=args.exclude)
 
 
 from ansible.module_utils.basic import *
@@ -599,13 +594,13 @@ def main():
     except pymysql.err.MySQLError as e:
         m.fail_json(msg=str(e))
 
-    path = prepare(args['db'], args['prefix'], args['timestamp'], args['path'])
+    path = args['path']
 
     try:
         if "restore" in args['action']:
-            db.restore(path=path, tablelist=args['tables'], exclude=args['exclude'])
+            db.restore(filename=path, tablelist=args['tables'], exclude=args['exclude'])
         if "dump" in args['action']:
-            db.dump(dirname=path, tablelist=args['tables'], exclude=args['exclude'])
+            db.dump(filename=path, tablelist=args['tables'], exclude=args['exclude'])
     except pymysql.err.MySQLError as e:
         m.fail_json(msg=str(e))
 
