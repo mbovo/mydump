@@ -1,6 +1,17 @@
 #!/usr/bin/env python2
 # -*- coding: UTF-8 -*-
 
+import pickle
+import sys
+import struct
+import tarfile
+import pymysql
+# import types
+# import os
+
+if sys.version_info > (2, 7):
+    import argparse
+
 """
 Pure python implementation of mysqldump utility as ansible module (and standalone script for python>2.7)
 This code uses pymysql 3d party library
@@ -11,19 +22,6 @@ __license__ = "MIT"
 __version__ = "2.1.0"
 __email__ = "mbovo@facilitylive.com"
 __copyright__ = "Copyright (c) 2017 Facilitylive OpCo Srl"
-
-import datetime
-import os
-import pickle
-import sys
-import types
-import struct
-import tarfile
-
-import pymysql
-
-if sys.version_info > (2, 7):
-    import argparse
 
 VERBOSE = 0
 
@@ -93,6 +91,8 @@ class Database:
                                      conv=conv,
                                      use_unicode=use_unicode,
                                      ssl=ssl,
+                                     port=port,
+                                     unix_socket=unix_socket,
                                      cursorclass=cursorclass)
         self._dbname = db
         self._odbc = "{0}:{1}@{2}/{3}".format(user, password, host, db)
@@ -451,29 +451,6 @@ class Table:
             sys.exit(20)
         return self
 
-def prepare(dbname, prefix="backup_", usedate=False, fulldir=None):
-    """
-
-    Create target directory where store dump files
-
-    :param dbname: Database name
-    :param prefix: directory prefix
-    :param usedate: boolean, use timestamp
-    :param fulldir: fulldir name instead of creation
-    :return: directory path as string
-    """
-    if fulldir:
-        dirname = fulldir
-    else:
-        dirname = os.getcwd() + "/" + prefix + dbname
-        if usedate:
-            now = datetime.datetime.now()
-            dirname += "_" + now.strftime("%Y-%m-%d_%H-%M")
-
-    if int(VERBOSE) > 0:
-        print u"DEBUG: Target directory: {0}".format(dirname)
-    return dirname
-
 
 def convert_bit(b):
     b = "\x00" * (8 - len(b)) + b # pad w/ zeroes
@@ -551,24 +528,6 @@ if sys.version_info > (2, 7):
 
 from ansible.module_utils.basic import *
 
-fields = {
-    "action": {
-        "default": "dump",
-        "choices": ["dump", "restore"],
-        "type": "str"
-    },
-    "db": {"required": True, "type": "str"},
-    "host": {"required": False, "default": "localhost", "type": "str"},
-    "user": {"required": True, "type": "str"},
-    "path": {"required": True, "type": "str"},
-    "password": {"required": True, "type": "str"},
-    "charset": {"required": False, "default": "utf8", "type": "str"},
-    "prefix": {"required": False, "default": "backup_", "type": "str"},
-    "timestamp": {"required": False, "default": False, "type": "bool"},
-    "exclude": {"required": False, "default": False, "type": "bool"},
-    "tables": {"required": False, "default": None, "type": "list"}
-}
-
 
 def main():
 
@@ -576,6 +535,23 @@ def main():
         if len(sys.argv) > 1:
             _parse_command(_build_parser())
             return
+
+    fields = {
+        "action": {
+            "default": "dump",
+            "choices": ["dump", "restore"],
+            "type": "str"
+        },
+        "db": {"required": True, "type": "str"},
+        "host": {"required": False, "default": "localhost", "type": "str"},
+        "user": {"required": True, "type": "str"},
+        "path": {"required": True, "type": "str"},
+        "port": {"required": False, "default": 3306, "type": "int"},
+        "password": {"required": True, "type": "str"},
+        "charset": {"required": False, "default": "utf8", "type": "str"},
+        "exclude": {"required": False, "default": False, "type": "bool"},
+        "tables": {"required": False, "default": None, "type": "list"}
+    }
 
     m = AnsibleModule(argument_spec=fields)
 
@@ -608,5 +584,4 @@ def main():
 
 
 if __name__ == "__main__":
-    #exit(_parse_command(_build_parser()))
     main()
