@@ -1,0 +1,12 @@
+---
+- hosts: "{{myhost}}"
+  tasks:
+    - name: "Free query to database {{dbname}}"
+      mysql_exec: 
+        db: "{{dbname}}" 
+        user: "root" 
+        password: "asdf10" 
+        query: "CREATE DATABASE myanstest;"
+      register: res
+
+    - debug: var=res
