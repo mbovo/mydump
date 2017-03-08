@@ -19,9 +19,7 @@ This code uses pymysql 3d party library
 
 __author__ = "Manuel Bovo <mbovo@facilitylive.com>"
 __license__ = "MIT"
-__version__ = "2.1.0"
-__email__ = "mbovo@facilitylive.com"
-__copyright__ = "Copyright (c) 2017 Facilitylive OpCo Srl"
+__version__ = "2.2.0"
 
 VERBOSE = 0
 
