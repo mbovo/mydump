@@ -13,7 +13,7 @@ BLa
 
 __author__ = "Manuel Bovo <mbovo@facilitylive.com>"
 __license__ = "MIT"
-__version__ = "1.0.0"
+__version__ = "1.2.0"
 
 VERBOSE = 0
 
