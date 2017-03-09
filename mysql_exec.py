@@ -15,7 +15,7 @@ This module permit free query execution on a mysql database. Supports inline que
 
 __author__ = "Manuel Bovo <mbovo@facilitylive.com>"
 __license__ = "MIT"
-__version__ = "1.2.0"
+__version__ = "2.3.0"
 
 VERBOSE = 0
 
