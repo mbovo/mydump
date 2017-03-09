@@ -8,7 +8,9 @@ from ansible.module_utils.basic import *
 
 
 """
-BLa
+Pure python implementation of mysql utility as ansible module (and standalone script for python>2.7)
+This code uses pymysql 3d party library
+This module permit free query execution on a mysql database. Supports inline query and .sql files
 """
 
 __author__ = "Manuel Bovo <mbovo@facilitylive.com>"
