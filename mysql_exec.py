@@ -3,6 +3,7 @@
 
 import sys
 import pymysql
+import struct
 from ansible.module_utils.basic import *
 
 
@@ -17,10 +18,29 @@ __version__ = "1.0.0"
 VERBOSE = 0
 
 
-def myexec(conn=None,query=None):
+def my_query(conn=None, query=None):
     cur = conn.cursor()
     cur.execute(query)
     return cur.fetchall()
+
+
+def my_exec(conn=None, path=None, m=None):
+
+    with open(path, 'r') as fp:
+        content = fp.read()
+
+    res = dict()
+    n = 0
+    for query in content.split(';'):
+        query = query.strip('\n ')
+        if len(query) > 0:
+            n += 1
+            try:
+                res[n] = my_query(conn, query)
+            except pymysql.err.MySQLError as e:
+                m.fail_json(msg=(str(e)+"Error on line {}:\n{}".format(n,query)))
+                return dict()
+    return res
 
 
 def convert_bit(b):
@@ -31,13 +51,19 @@ def convert_bit(b):
 def main():
 
     fields = {
+        "type": {
+            "default": "query",
+            "choices": ["query", "file"],
+            "type": "str"
+        },
         "db": {"required": True, "type": "str"},
         "host": {"required": False, "default": "localhost", "type": "str"},
         "user": {"required": True, "type": "str"},
         "port": {"required": False, "default": 3306, "type": "int"},
         "password": {"required": True, "type": "str"},
         "charset": {"required": False, "default": "utf8", "type": "str"},
-        "query": {"required": True, "type": "str"}
+        "query": {"required": False, "default": None,  "type": "str"},
+        "file": {"required": False, "default": None, "type": "str"}
     }
 
     m = AnsibleModule(argument_spec=fields)
@@ -55,15 +81,18 @@ def main():
                                charset=args['charset'],
                                conv=convert_matrix,
                                cursorclass=pymysql.cursors.DictCursor)
+
     except pymysql.err.MySQLError as e:
         m.fail_json(msg=str(e))
-
-    query = args['query']
 
     try:
-        res = myexec(conn, query)
-    except pymysql.err.MySQLError as e:
+        if args['type'] == "query":
+            res = my_query(conn, args['query'])
+        else:
+            res = my_exec(conn, args['file'], m)
+    except (pymysql.err.MySQLError, IOError) as e:
         m.fail_json(msg=str(e))
+        return
 
     m.exit_json(changed=True, results=res)
 
