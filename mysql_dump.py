@@ -6,8 +6,6 @@ import sys
 import struct
 import tarfile
 import pymysql
-# import types
-# import os
 
 if sys.version_info > (2, 7):
     import argparse
@@ -19,7 +17,7 @@ This code uses pymysql 3d party library
 
 __author__ = "Manuel Bovo <mbovo@facilitylive.com>"
 __license__ = "MIT"
-__version__ = "2.3.0"
+__version__ = "2.3.1"
 
 VERBOSE = 0
 
@@ -61,17 +59,6 @@ UNLOCK TABLES;
 
 
 class Database:
-
-    # a mysql connection object
-    _conn = None
-    _dbname = ""
-    _odbc = ""
-    _dirname = ""
-    _tables = dict()
-    _charset = "utf8"
-
-    # will be converted into tuple() after __init__
-    _tablenames = list()
 
     # define an argument subset of pymysql Connect object
     def __init__(self, host=None, user=None, password="",
@@ -254,29 +241,18 @@ class Database:
 
 class Table:
 
-    _tablename = None
-    _rows = list()
-    _desc = dict()
-    _ddl = dict()
-    _charset = 'utf-8'
-    _pos=0
-
-    def __init__(self, tablename="", conn=None, charset=None):
+    def __init__(self, tablename="", conn=None, charset='utf-8'):
         if not conn or not isinstance(conn, pymysql.connections.Connection):
             return
 
-        if charset:
-            self._charset = charset
-
+        self._charset = charset
         self._tablename = tablename
         self._desc = self._get_desc(conn)
         self._ddl = self._get_ddl(conn)
-        self._rows = []
+        self._rows = list()
         self._pos = 0
 
         for row in self._get_rows(conn):
-            #self._rows.append(Row(row, self._desc, tablename))
-            #self._rows.append( self._get_row_ddl(row ))
             self._rows.append(row)
 
     def __str__(self):
