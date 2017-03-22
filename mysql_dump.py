@@ -5,6 +5,8 @@ import pickle
 import sys
 import struct
 import tarfile
+import time
+
 import pymysql
 
 if sys.version_info > (2, 7):
@@ -21,7 +23,10 @@ __version__ = "2.3.1"
 
 VERBOSE = 0
 
-SQL_ST_PRE = """/*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
+
+SQL_ST_PRE = """
+
+/*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
 /*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;
 /*!40101 SET @OLD_COLLATION_CONNECTION=@@COLLATION_CONNECTION */;
 /*!40101 SET NAMES utf8 */;
@@ -30,26 +35,40 @@ SQL_ST_PRE = """/*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */
 /*!40014 SET @OLD_UNIQUE_CHECKS=@@UNIQUE_CHECKS, UNIQUE_CHECKS=0 */;
 /*!40014 SET @OLD_FOREIGN_KEY_CHECKS=@@FOREIGN_KEY_CHECKS, FOREIGN_KEY_CHECKS=0 */;
 /*!40101 SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='NO_AUTO_VALUE_ON_ZERO' */;
-/*!40111 SET @OLD_SQL_NOTES=@@SQL_NOTES, SQL_NOTES=0 */;"""
+/*!40111 SET @OLD_SQL_NOTES=@@SQL_NOTES, SQL_NOTES=0 */;
+"""
 
-SQL_ST_POST = """/*!40101 SET SQL_MODE=@OLD_SQL_MODE */;
+SQL_ST_POST = """
+/*!40101 SET SQL_MODE=@OLD_SQL_MODE */;
 /*!40014 SET FOREIGN_KEY_CHECKS=@OLD_FOREIGN_KEY_CHECKS */;
 /*!40014 SET UNIQUE_CHECKS=@OLD_UNIQUE_CHECKS */;
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
 /*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
-/*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;"""
+/*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
+
+-- Dump Completed on {0}
+"""
 
 SQL_DROP_ST_PRE = """
+--
+-- Table structure for table `{0}`
+--
+
+"""
+
+SQL_CREATE_ST_PRE = """
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
 """
 
-SQL_DROP_ST_POST = None
-
 SQL_INSERT_ST_PRE = """
+--
+-- Dumping data for table `{0}`
+--
 LOCK TABLES `{0}` WRITE;
-/*!40000 ALTER TABLE `{0}` DISABLE KEYS */;"""
+/*!40000 ALTER TABLE `{0}` DISABLE KEYS */;
+"""
 
 SQL_INSERT_ST_POST = """
 /*!40000 ALTER TABLE `{0}` ENABLE KEYS */;
@@ -87,6 +106,18 @@ class Database:
         self._dirname = ""
 
         cur = self._conn.cursor()
+        cur.execute("SELECT VERSION();")
+
+        self.server_version = cur.fetchall()[0]['VERSION()']
+
+        global SQL_ST_PRE
+        SQL_ST_PRE = """-- mysql_dump - pure python mysql dump {0}
+--
+-- Host: {1}    Database: {2}
+-- ------------------------------------------------------
+-- Server version     {3}
+""".format(__version__, host, db, self.server_version) + SQL_ST_PRE
+
         cur.execute("SHOW TABLES")
 
         for i in cur:
@@ -176,6 +207,37 @@ class Database:
         self.archive(dirname, filename)
         shutil.rmtree(dirname)
 
+    def dumpsql(self, filename=None, tablelist=None, exclude=False, refetch=True):
+
+        if refetch:
+            self.fetch(tablelist, exclude)
+
+        with open(filename, 'wb') as f:
+            f.write(SQL_ST_PRE.encode())
+
+            for tablename in sorted(self._tables):
+                table = self._tables[tablename]
+
+                f.write(SQL_DROP_ST_PRE.format(tablename).encode('utf-8'))
+
+                f.write((u"DROP TABLE IF EXISTS `{0}`;".format(tablename)).encode('utf-8'))
+
+                f.write(SQL_CREATE_ST_PRE.encode('utf-8'))
+
+                f.write(unicode(table).encode('utf-8'))
+
+                f.write(u";\n".encode('utf-8'))
+
+                f.write(SQL_INSERT_ST_PRE.format(tablename).encode('utf-8'))
+
+                for row in table:
+                    f.write(row.encode('utf-8'))
+                    f.write(u"\n".encode('utf-8'))
+
+                f.write(SQL_INSERT_ST_POST.format(tablename).encode('utf-8'))
+
+            f.write(SQL_ST_POST.format(time.strftime("%Y-%m-%d %H:%M:%S")).encode('utf-8'))
+
     def restore(self, filename=None, tablelist=None, exclude=False):
 
         path = tempfile.mkdtemp(dir=tempfile.tempdir)
@@ -261,17 +323,6 @@ class Table:
     def __unicode__(self):
         return unicode(self._ddl[u'Create Table']).encode(self._charset)
 
-    def __eq__(self, other):
-        # This is very cost impacting
-        if not isinstance(other, Table):
-            return False
-        if len(other.rows()) != len(self._rows):
-            return False
-        for row in other.rows():
-            if row not in self._rows:
-                return False
-        return True
-
     def __getitem__(self, item):
         if item < len(self._rows):
             return self._get_row_ddl(self._rows[item])
@@ -290,11 +341,10 @@ class Table:
         else:
             raise StopIteration()
 
-    def __next__(self):
-        return self.next()
+    __next__ = next
 
     def rows(self):
-        return self._rows
+        return self._rows[:]
 
     def name(self):
         return self._tablename
@@ -354,20 +404,13 @@ class Table:
         fields = self._desc
         query += "INSERT INTO `" + self._tablename + "` ( `" + "`,`".join(fields.keys()) + "` ) VALUES ("
 
-        #if int(VERBOSE) >= 2:
-        #    print u"DEBUG:\t      Row {0} / {1}".format(ncur, tot)
-
         first = True
         for field in fields.keys():
             query += "," if first is False else ""
             first = False
 
-            if int(VERBOSE) >= 3:
-                print u"DEBUG:\t\t   Field: {0:30}  Val: {1}".format(field, self._element[field]) \
-                    .encode('utf-8', errors='ignore')
-
             if fields[field] in ("blob", "longblob", "mediumblob"):
-                query += "UNHEX('" + row[field] + u"')"
+                query += "UNHEX('" + row[field] + "')"
             elif fields[field] in "date":
                 query += pymysql.converters.escape_date(row[field])
             else:
@@ -381,7 +424,7 @@ class Table:
                 elif isinstance(val, bool):
                     query += pymysql.converters.escape_bool(val)
                 elif isinstance(val, datetime.datetime):
-                    query += "'" + unicode(val) + "'"
+                    query += "'" + str(val) + "'"
                 elif isinstance(val, types.UnicodeType):
                     query += pymysql.converters.escape_unicode(val)
 
@@ -550,7 +593,7 @@ def main():
         if "restore" in args['action']:
             db.restore(filename=path, tablelist=args['tables'], exclude=args['exclude'])
         if "dump" in args['action']:
-            db.dump(filename=path, tablelist=args['tables'], exclude=args['exclude'])
+            db.dumpsql(filename=path, tablelist=args['tables'], exclude=args['exclude'])
     except pymysql.err.MySQLError as e:
         m.fail_json(msg=str(e))
 
