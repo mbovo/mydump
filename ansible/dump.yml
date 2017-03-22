@@ -2,11 +2,11 @@
 - hosts: "{{myhost}}"
   tasks:
     - name: "Dump of database {{dbname}}"
-      mydump: 
+      mysql_dump: 
         db: "{{dbname}}" 
         user: "root" 
         password: "asdf10" 
-        path: "./{{dbname}}"
+        path: "./{{dbname}}.sql"
 #        exclude: true 
 #        tables:
 #          - AssetEntry
