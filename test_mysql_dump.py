@@ -69,3 +69,11 @@ def test_dump():
 
     db.dump('/tmp/test.dmp')
 
+def test_restore():
+
+    db = mysql_dump.Database(host='localhost',
+                  db='g7-fportal',
+                  user='root',
+                  password='asdf10')
+
+    db.restore('/tmp/test.dmp')

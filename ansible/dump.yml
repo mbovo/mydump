@@ -6,7 +6,7 @@
         db: "{{dbname}}" 
         user: "root" 
         password: "asdf10" 
-        path: "./{{dbname}}.sql"
+        path: "./{{dbname}}.dmp"
 #        exclude: true 
 #        tables:
 #          - AssetEntry

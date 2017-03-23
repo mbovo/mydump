@@ -30,7 +30,7 @@ def test_exec():
 
     m = AnsibleStub()
     try:
-        mysql_exec.my_exec(conn, "./ansible/g7-fportal.sql", m)
+        mysql_exec.my_exec(conn, "/tmp/test.sql", m)
     except Exception as e:
         assert not e
 

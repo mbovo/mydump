@@ -264,11 +264,13 @@ class Database:
             cur = self._conn.cursor()
 
             try:
+                cur.execute(SQL_ST_PRE)
                 cur.execute(u"DROP TABLE IF EXISTS `{0}`;".format(tname))
             except pymysql.err.MySQLError as e:
                 print "Unable to DROP table `{0} {1}` exception raised".format(tname, e)
                 continue
             try:
+                cur.execute(SQL_CREATE_ST_PRE)
                 cur.execute(str(table))
             except pymysql.err.MySQLError as e:
                 print "Unable to CREATE table `{0} {1}` exception raised".format(tname, e)
@@ -276,7 +278,7 @@ class Database:
 
             # restore each row
             if SQL_INSERT_ST_PRE:
-                cur.execute(SQL_INSERT_ST_PRE.format(tname, tname))
+                cur.execute(SQL_INSERT_ST_PRE.format(tname))
 
             for row in table:
                 try:
@@ -289,7 +291,7 @@ class Database:
                     continue
 
             if SQL_INSERT_ST_POST:
-                cur.execute(SQL_INSERT_ST_POST.format(tname, tname))
+                cur.execute(SQL_INSERT_ST_POST.format(tname))
 
             _ = cur.fetchall()
 
@@ -552,7 +554,7 @@ def main():
     fields = {
         "action": {
             "default": "dump",
-            "choices": ["dump", "restore"],
+            "choices": ["dump", "restore", "dumpsql"],
             "type": "str"
         },
         "db": {"required": True, "type": "str"},
@@ -589,6 +591,8 @@ def main():
         if "restore" in args['action']:
             db.restore(filename=path, tablelist=args['tables'], exclude=args['exclude'])
         if "dump" in args['action']:
+            db.dump(filename=path, tablelist=args['tables'], exclude=args['exclude'])
+        if "dumpsql" in args['action']:
             db.dumpsql(filename=path, tablelist=args['tables'], exclude=args['exclude'])
     except pymysql.err.MySQLError as e:
         m.fail_json(msg=str(e))
