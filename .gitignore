@@ -1,3 +1,6 @@
 backup_*
 .idea/*
 *.tgz
+__pycache__
+.cache
+*.pyc

@@ -19,6 +19,8 @@ VERBOSE = 0
 
 
 def my_query(conn=None, query=None):
+    if not conn:
+        return None
     cur = conn.cursor()
     cur.execute(query)
     return cur.fetchall()
@@ -27,7 +29,7 @@ def my_query(conn=None, query=None):
 def my_exec(conn=None, path=None, m=None):
 
     with open(path, 'rb') as fp:
-        content = unicode(fp. fp.read().decode('utf-8'))
+        content = unicode(fp.read().decode('utf-8'))
 
     res = dict()
     n = 0
@@ -36,14 +38,18 @@ def my_exec(conn=None, path=None, m=None):
         if len(query) > 0:
             n += 1
             try:
-                res[n] = my_query(conn, query)
+                r = my_query(conn, query)
+                if r:
+                    res[n] = r
             except pymysql.err.MySQLError as e:
-                m.fail_json(msg=(str(e)+"Error on line {}:\n{}".format(n, query)))
+                if not m.fail_json(msg=(str(e)+"Error on line {}:\n{}".format(n, query))):
+                    raise e
                 return dict()
     return res
 
 
 def convert_bit(b):
+
     b = "\x00" * (8 - len(b)) + b # pad w/ zeroes
     return struct.unpack(">Q", b)[0]
 
