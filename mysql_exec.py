@@ -1,11 +1,9 @@
 #!/usr/bin/env python2
 # -*- coding: UTF-8 -*-
 
-import sys
-import pymysql
 import struct
+import pymysql
 from ansible.module_utils.basic import *
-
 
 """
 Pure python implementation of mysql utility as ansible module (and standalone script for python>2.7)
@@ -28,8 +26,8 @@ def my_query(conn=None, query=None):
 
 def my_exec(conn=None, path=None, m=None):
 
-    with open(path, 'r') as fp:
-        content = fp.read()
+    with open(path, 'rb') as fp:
+        content = unicode(fp. fp.read().decode('utf-8'))
 
     res = dict()
     n = 0
@@ -40,7 +38,7 @@ def my_exec(conn=None, path=None, m=None):
             try:
                 res[n] = my_query(conn, query)
             except pymysql.err.MySQLError as e:
-                m.fail_json(msg=(str(e)+"Error on line {}:\n{}".format(n,query)))
+                m.fail_json(msg=(str(e)+"Error on line {}:\n{}".format(n, query)))
                 return dict()
     return res
 

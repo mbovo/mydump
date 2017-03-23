@@ -1,23 +1,13 @@
 ---
 - hosts: "{{myhost}}"
   tasks:
-    - name: "Free query to database {{dbname}}"
-      mysql_exec: 
-        db: "{{dbname}}" 
-        user: "root" 
-        password: "asdf10" 
-        query: "DROP DATABASE IF EXISTS myanstest; CREATE DATABASE myanstest;"
-      register: res
-
-    - debug: var=res
-
     - name: "Free exec sql file to database {{dbname}}"
       mysql_exec: 
         db: "{{dbname}}" 
         user: "root" 
         password: "asdf10" 
         type: file
-        file: "./file.sql"
+        file: "./g7-fportal.sql"
       register: res
 
     - debug: var=res
