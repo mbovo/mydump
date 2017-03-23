@@ -262,8 +262,6 @@ class Database:
 
             self._tables[tname] = table
             cur = self._conn.cursor()
-            if SQL_DROP_ST_PRE:
-                cur.execute(SQL_DROP_ST_PRE)
 
             try:
                 cur.execute(u"DROP TABLE IF EXISTS `{0}`;".format(tname))
@@ -275,9 +273,6 @@ class Database:
             except pymysql.err.MySQLError as e:
                 print "Unable to CREATE table `{0} {1}` exception raised".format(tname, e)
                 continue
-
-            if SQL_DROP_ST_POST:
-                cur.execute(SQL_DROP_ST_POST)
 
             # restore each row
             if SQL_INSERT_ST_PRE:
@@ -300,6 +295,7 @@ class Database:
 
         shutil.rmtree(path)
         return len(self._tables), tablelist
+
 
 class Table:
 

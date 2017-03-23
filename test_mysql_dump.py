@@ -48,3 +48,24 @@ def test_fetch():
     res = db.fetch()
     assert res != None
     assert len(db.tables()) > 0
+
+
+def test_dumpsql():
+
+    db = mysql_dump.Database(host='localhost',
+                  db='g7-fportal',
+                  user='root',
+                  password='asdf10')
+
+    db.dumpsql('/tmp/test.sql')
+
+
+def test_dump():
+
+    db = mysql_dump.Database(host='localhost',
+                  db='g7-fportal',
+                  user='root',
+                  password='asdf10')
+
+    db.dump('/tmp/test.dmp')
+
