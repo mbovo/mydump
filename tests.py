@@ -1,6 +1,8 @@
 
 import pymysql
 import mysql_dump
+import mysql_exec
+import pytest
 
 
 class AnsibleStub:
@@ -9,30 +11,31 @@ class AnsibleStub:
         return False
 
 
-conn = None
-
-
-def test_conn():
-    global conn
-    conn = pymysql.connect(host='localhost',
+@pytest.fixture()
+def conn():
+    return pymysql.connect(host='localhost',
                            db='g7-fportal',
                            user='root',
                            password='asdf10',
                            cursorclass=pymysql.cursors.DictCursor)
-    assert conn
 
-
-def test_Database():
-
+@pytest.fixture()
+def db():
     convert_matrix = pymysql.converters.conversions
     convert_matrix[pymysql.FIELD_TYPE.BIT] = mysql_dump.convert_bit
 
-
-    db = mysql_dump.Database(host='localhost',
+    return mysql_dump.Database(host='localhost',
                   db='g7-fportal',
                   user='root',
                   password='asdf10',
                   conv=convert_matrix)
+
+
+def test_conn(conn):
+    assert conn
+
+
+def test_Database(db):
 
     assert db
     assert str(db) == db._odbc
@@ -41,34 +44,25 @@ def test_Database():
     assert tnames[0] != ""
 
 
-def test_fetch():
+def test_fetch(db):
 
-    db = mysql_dump.Database(host='localhost',
-                  db='g7-fportal',
-                  user='root',
-                  password='asdf10')
+    assert db
 
     res = db.fetch()
     assert res != None
     assert len(db.tables()) > 0
 
 
-def test_dumpsql():
+def test_dumpsql(db):
 
-    db = mysql_dump.Database(host='localhost',
-                  db='g7-fportal',
-                  user='root',
-                  password='asdf10')
+    assert db
 
     db.dumpsql('/tmp/test.sql')
 
 
-def test_dump():
+def test_dump(db):
 
-    db = mysql_dump.Database(host='localhost',
-                  db='g7-fportal',
-                  user='root',
-                  password='asdf10')
+    assert db
 
     db.dump('/tmp/test.dmp')
 
@@ -81,3 +75,17 @@ def test_restore():
                   password='asdf10')
 
     db.restore('/tmp/test.dmp')
+
+
+def test_exec_query(conn):
+    r = mysql_exec.my_query(conn, "SELECT VERSION();")
+    assert r
+
+
+def test_exec_exec(conn):
+
+    m = AnsibleStub()
+    try:
+        mysql_exec.my_exec(conn, "/tmp/test.sql", m)
+    except Exception as e:
+        assert not e
