@@ -2,6 +2,7 @@
 import pymysql
 import mysql_exec
 
+
 class AnsibleStub:
 
     def fail_json(self, *args, **kvargs):
@@ -20,13 +21,15 @@ def test_conn():
                            cursorclass=pymysql.cursors.DictCursor)
     assert conn
 
+
 def test_query():
     global conn
     r = mysql_exec.my_query(conn, "SELECT VERSION();")
     assert r
 
+
 def test_exec():
-    global conn#
+    global conn
 
     m = AnsibleStub()
     try:

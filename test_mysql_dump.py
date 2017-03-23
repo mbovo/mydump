@@ -2,6 +2,7 @@
 import pymysql
 import mysql_dump
 
+
 class AnsibleStub:
 
     def fail_json(self, *args, **kvargs):
@@ -20,6 +21,7 @@ def test_conn():
                            cursorclass=pymysql.cursors.DictCursor)
     assert conn
 
+
 def test_Database():
 
     convert_matrix = pymysql.converters.conversions
@@ -37,6 +39,7 @@ def test_Database():
     tnames = db.tablenames()
     assert len(tnames) > 0
     assert tnames[0] != ""
+
 
 def test_fetch():
 
@@ -68,6 +71,7 @@ def test_dump():
                   password='asdf10')
 
     db.dump('/tmp/test.dmp')
+
 
 def test_restore():
 
