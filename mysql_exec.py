@@ -26,7 +26,7 @@ def my_query(conn=None, query=None):
     return cur.fetchall()
 
 
-def my_exec(conn=None, path=None, m=None):
+def my_exec(conn=None, path=None):
 
     with open(path, 'rb') as fp:
         content = unicode(fp.read().decode('utf-8'))
@@ -37,14 +37,9 @@ def my_exec(conn=None, path=None, m=None):
         query = query.strip('\n ')
         if len(query) > 0:
             n += 1
-            try:
-                r = my_query(conn, query)
-                if r:
-                    res[n] = r
-            except pymysql.err.MySQLError as e:
-                if not m.fail_json(msg=(str(e)+"Error on line {}:\n{}".format(n, query))):
-                    raise e
-                return dict()
+            r = my_query(conn, query)
+            if r:
+                res[n] = r
     return res
 
 
@@ -95,7 +90,7 @@ def main():
         if args['type'] == "query":
             res = my_query(conn, args['query'])
         else:
-            res = my_exec(conn, args['file'], m)
+            res = my_exec(conn, args['file'])
     except (pymysql.err.MySQLError, IOError) as e:
         m.fail_json(msg=str(e))
         return

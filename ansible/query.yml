@@ -7,7 +7,7 @@
         user: "root" 
         password: "asdf10" 
         type: file
-        file: "./g7-fportal.sql"
+        file: "./pre.sql"
       register: res
 
     - debug: var=res

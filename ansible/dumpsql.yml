@@ -1,0 +1,16 @@
+---
+- hosts: "{{myhost}}"
+  tasks:
+    - name: "Dump of database {{dbname}}"
+      mysql_dump: 
+        db: "{{dbname}}" 
+        user: "root" 
+        password: "asdf10" 
+        path: "./test.sql"
+        action: "dumpsql"
+#        exclude: true 
+#        tables:
+#          - AssetEntry
+      register: res
+
+    - debug: var=res

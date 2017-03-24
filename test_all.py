@@ -1,15 +1,12 @@
-
 import pymysql
 import mysql_dump
 import mysql_exec
 import pytest
 
-
-class AnsibleStub:
-
-    def fail_json(self, *args, **kvargs):
-        return False
-
+@pytest.mark.benchmark(
+    disable_gc=True,
+    warmup=False
+)
 
 @pytest.fixture()
 def conn():
@@ -18,6 +15,7 @@ def conn():
                            user='root',
                            password='asdf10',
                            cursorclass=pymysql.cursors.DictCursor)
+
 
 @pytest.fixture()
 def db():
@@ -30,62 +28,67 @@ def db():
                   password='asdf10',
                   conv=convert_matrix)
 
+slow = pytest.mark.skipif(
+    not pytest.config.getoption("--runslow"),
+    reason="need --runslow option to run"
+)
 
-def test_conn(conn):
-    assert conn
+class TestDump:
 
+    def test_conn(self, conn):
+        assert conn
 
-def test_Database(db):
+    def test_Database(self, db ):
 
-    assert db
-    assert str(db) == db._odbc
-    tnames = db.tablenames()
-    assert len(tnames) > 0
-    assert tnames[0] != ""
+        assert db
+        assert str(db) == db._odbc
+        tnames = db.tablenames()
+        assert len(tnames) > 0
+        assert tnames[0] != ""
 
+    def test_fetch(self, db, benchmark):
 
-def test_fetch(db):
+        assert db
 
-    assert db
+        res = benchmark(db.fetch)
+        assert res != None
+        assert len(db.tables()) > 0
 
-    res = db.fetch()
-    assert res != None
-    assert len(db.tables()) > 0
+    def test_dumpsql(self, db, benchmark):
 
+        assert db
 
-def test_dumpsql(db):
+        benchmark(db.dumpsql, '/tmp/test.sql')
 
-    assert db
+    @slow
+    def test_dump(self, db, benchmark):
 
-    db.dumpsql('/tmp/test.sql')
+        assert db
 
+        benchmark(db.dump, '/tmp/test.dmp')
 
-def test_dump(db):
+    @slow
+    def test_restore(self, benchmark):
 
-    assert db
+        db = mysql_dump.Database(host='localhost',
+                      db='g7-fportal',
+                      user='root',
+                      password='asdf10')
 
-    db.dump('/tmp/test.dmp')
-
-
-def test_restore():
-
-    db = mysql_dump.Database(host='localhost',
-                  db='g7-fportal',
-                  user='root',
-                  password='asdf10')
-
-    db.restore('/tmp/test.dmp')
-
-
-def test_exec_query(conn):
-    r = mysql_exec.my_query(conn, "SELECT VERSION();")
-    assert r
+        print benchmark(db.restore, '/tmp/test.dmp')
 
 
-def test_exec_exec(conn):
+class TestExec:
 
-    m = AnsibleStub()
-    try:
-        mysql_exec.my_exec(conn, "/tmp/test.sql", m)
-    except Exception as e:
-        assert not e
+    def test_query(self, conn):
+        r = mysql_exec.my_query(conn, "SELECT VERSION();")
+        assert r
+
+    def test_exec(self, conn):
+
+        with open('/tmp/test.sql', 'w') as fp:
+            fp.write('SELECT * FROM mysql.user;')
+
+        r = mysql_exec.my_exec(conn, '/tmp/test.sql')
+        print r
+        assert r
