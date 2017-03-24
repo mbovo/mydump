@@ -5,7 +5,6 @@ import pickle
 import sys
 import struct
 import tarfile
-import time
 
 import pymysql
 

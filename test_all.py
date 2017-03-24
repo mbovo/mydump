@@ -3,10 +3,6 @@ import mysql_dump
 import mysql_exec
 import pytest
 
-@pytest.mark.benchmark(
-    disable_gc=True,
-    warmup=False
-)
 
 @pytest.fixture()
 def conn():
@@ -29,8 +25,8 @@ def db():
                   conv=convert_matrix)
 
 slow = pytest.mark.skipif(
-    not pytest.config.getoption("--runslow"),
-    reason="need --runslow option to run"
+    not pytest.config.getoption("--long"),
+    reason="need --long option to run"
 )
 
 class TestDump:
@@ -46,36 +42,36 @@ class TestDump:
         assert len(tnames) > 0
         assert tnames[0] != ""
 
-    def test_fetch(self, db, benchmark):
+    def test_fetch(self, db):
 
         assert db
 
-        res = benchmark(db.fetch)
-        assert res != None
+        res = db.fetch()
+        assert res is not None
         assert len(db.tables()) > 0
 
-    def test_dumpsql(self, db, benchmark):
+    def test_dumpsql(self, db):
 
         assert db
 
-        benchmark(db.dumpsql, '/tmp/test.sql')
+        db.dumpsql('/tmp/test.sql')
 
     @slow
-    def test_dump(self, db, benchmark):
+    def test_dump(self, db):
 
         assert db
 
-        benchmark(db.dump, '/tmp/test.dmp')
+        db.dump('/tmp/test.dmp')
 
     @slow
-    def test_restore(self, benchmark):
+    def test_restore(self):
 
         db = mysql_dump.Database(host='localhost',
                       db='g7-fportal',
                       user='root',
                       password='asdf10')
 
-        print benchmark(db.restore, '/tmp/test.dmp')
+        print db.restore('/tmp/test.dmp')
 
 
 class TestExec:
