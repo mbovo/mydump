@@ -2,6 +2,7 @@
 # -*- coding: UTF-8 -*-
 
 import struct
+import io
 import pymysql
 from ansible.module_utils.basic import *
 
@@ -28,19 +29,33 @@ def my_query(conn=None, query=None):
 
 def my_exec(conn=None, path=None):
 
-    with open(path, 'rb') as fp:
-        content = unicode(fp.read().decode('utf-8'))
-
     res = dict()
     n = 0
-    for query in content.split(';'):
-        query = query.strip('\n ')
-        if len(query) > 0:
+    with open(path, 'rb') as fp:
+        content = fp.read()
+        for query in content.split(';\n'):
             n += 1
-            r = my_query(conn, query)
-            if r:
-                res[n] = r
-    return res
+            if len(query) > 0:
+                my_query(conn, query)
+
+    return dict(statements=n)
+
+#
+# def my_exec(conn=None, path=None):
+#
+#     with open(path, 'rb') as fp:
+#         content = unicode(fp.read().decode('utf-8'))  #  .encode('utf-8'))
+#
+#     res = dict()
+#     n = 0
+#     for query in content.split(';'):
+#         query = query.strip('\n ')
+#         if len(query) > 0:
+#             n += 1
+#             r = my_query(conn, query)
+#             if r:
+#                 res[n] = r
+#     return res
 
 
 def convert_bit(b):
