@@ -130,10 +130,10 @@ class Database:
         return unicode(self._odbc)
 
     def tablenames(self):
-        return self._tablenames
+        return self._tablenames[:]
 
     def tables(self):
-        return self._tables
+        return self._tables.copy()
 
     def __contains__(self, item):
         if item in self._tablenames:
@@ -328,17 +328,35 @@ class Table:
         return len(self._rows)
 
     def __iter__(self):
-        return self
+        class TableIterator:
+            def __init__(self, table):
+                self._pos = 0
+                self._table = table
 
-    def next(self):
-        if self._pos < len(self._rows):
-            i = self._get_row_ddl(self._rows[self._pos])
-            self._pos += 1
-            return i
-        else:
-            raise StopIteration()
+            def __iter__(self):
+                return self
 
-    __next__ = next
+            def next(self):
+                try:
+                    i = self._table._get_row_ddl(self._table._rows[self._pos])
+                    self._pos += 1
+                except:
+                    raise StopIteration()
+                return i
+
+            __next__ = next
+
+        return TableIterator(table=self)
+
+    # def next(self):
+    #     if self._pos < len(self._rows):
+    #         i = self._get_row_ddl(self._rows[self._pos])
+    #         self._pos += 1
+    #         return i
+    #     else:
+    #         raise StopIteration()
+    #
+    # __next__ = next
 
     def rows(self):
         return self._rows[:]
