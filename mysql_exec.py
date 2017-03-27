@@ -2,7 +2,6 @@
 # -*- coding: UTF-8 -*-
 
 import struct
-import io
 import pymysql
 from ansible.module_utils.basic import *
 
