@@ -29,7 +29,6 @@ def my_query(conn=None, query=None):
 
 def my_exec(conn=None, path=None):
 
-    res = dict()
     n = 0
     with open(path, 'rb') as fp:
         content = fp.read()
@@ -40,27 +39,10 @@ def my_exec(conn=None, path=None):
 
     return dict(statements=n)
 
-#
-# def my_exec(conn=None, path=None):
-#
-#     with open(path, 'rb') as fp:
-#         content = unicode(fp.read().decode('utf-8'))  #  .encode('utf-8'))
-#
-#     res = dict()
-#     n = 0
-#     for query in content.split(';'):
-#         query = query.strip('\n ')
-#         if len(query) > 0:
-#             n += 1
-#             r = my_query(conn, query)
-#             if r:
-#                 res[n] = r
-#     return res
-
 
 def convert_bit(b):
 
-    b = "\x00" * (8 - len(b)) + b # pad w/ zeroes
+    b = "\x00" * (8 - len(b)) + b  # pad w/ zeroes
     return struct.unpack(">Q", b)[0]
 
 
