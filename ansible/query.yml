@@ -7,7 +7,7 @@
         user: "root" 
         password: "asdf10" 
         type: file
-        file: "./test.sql"
+        file: "./pre.sql"
       register: res
 
     - debug: var=res
