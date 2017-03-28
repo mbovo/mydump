@@ -14,7 +14,7 @@ This module permit free query execution on a mysql database. Supports inline que
 
 __author__ = "Manuel Bovo <mbovo@facilitylive.com>"
 __license__ = "MIT"
-__version__ = "2.4.1"
+__version__ = "2.4.2"
 
 VERBOSE = 0
 
@@ -30,7 +30,9 @@ def my_query(conn=None, query=None):
 def my_exec(conn=None, path=None):
 
     n = 0
+    res = dict()
     content = list()
+    cur = conn.cursor()
     with io.open(path, 'rb') as fp:
         for line in fp:
             n += 1
@@ -39,10 +41,14 @@ def my_exec(conn=None, path=None):
             if line.endswith(";\n") and len(line) > 1:
                 # query = "".join(content)
                 # print query
-                my_query(conn, "".join(content))
+                # my_query(conn, "".join(content))
+                cur.execute("".join(content))
+                rev = cur.fetchall()
+                if len(rev)>0:
+                    res[n] = rev
                 content = list()
 
-    return dict(statements=n)
+    return dict(statements=n, results=res)
 
 
 def convert_bit(b):
