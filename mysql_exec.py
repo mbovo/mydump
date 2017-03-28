@@ -2,6 +2,7 @@
 # -*- coding: UTF-8 -*-
 
 import struct
+import io
 import pymysql
 from ansible.module_utils.basic import *
 
@@ -29,12 +30,17 @@ def my_query(conn=None, query=None):
 def my_exec(conn=None, path=None):
 
     n = 0
-    with open(path, 'rb') as fp:
-        content = fp.read()
-        for query in content.split(';\n'):
+    content = list()
+    with io.open(path, 'rb') as fp:
+        for line in fp:
             n += 1
-            if len(query) > 0:
-                my_query(conn, query)
+            if not line.startswith('--') and len(line) > 1:
+                content.append(line)
+            if line.endswith(";\n") and len(line) > 1:
+                # query = "".join(content)
+                # print query
+                my_query(conn, "".join(content))
+                content = list()
 
     return dict(statements=n)
 
