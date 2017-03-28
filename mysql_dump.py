@@ -18,7 +18,7 @@ This code uses pymysql 3d party library
 
 __author__ = "Manuel Bovo <mbovo@facilitylive.com>"
 __license__ = "MIT"
-__version__ = "2.4.0"
+__version__ = "2.4.1"
 
 VERBOSE = 0
 
