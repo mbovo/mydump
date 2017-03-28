@@ -5,15 +5,23 @@ import pickle
 import sys
 import struct
 import tarfile
-
+import os
+import os.path
+import tempfile
+import shutil
+import time
 import pymysql
+import datetime
+import types
+
+from ansible.module_utils.basic import AnsibleModule
 
 if sys.version_info > (2, 7):
     import argparse
 
 """
-Pure python implementation of mysqldump utility as ansible module (and standalone script for python>2.7)
-This code uses pymysql 3d party library
+Pure python implementation of mysqldump utility as ansible module
+(and standalone script for python>2.7) This code uses pymysql 3d party library
 """
 
 __author__ = "Manuel Bovo <mbovo@facilitylive.com>"
@@ -159,7 +167,7 @@ class Database:
     def __len__(self):
         return len(self._tablenames)
 
-    def __fetch_n_dump(self, tablelist=None, exclude=False, dump=False, refetch=True, dirname=None ):
+    def __fetch_n_dump(self, tablelist=None, exclude=False, dump=False, refetch=True, dirname=None):
 
         # use the whole list  or choose
         if not tablelist:
@@ -195,7 +203,7 @@ class Database:
         os.chdir(old_dir)
 
     def unarchive(self, filename, path):
-        tar = tarfile.open(filename,'r:gz')
+        tar = tarfile.open(filename, 'r:gz')
         tar.extractall(path)
         tar.close()
         return path
@@ -257,7 +265,7 @@ class Database:
 
         for tname in tablelist:
             table = Table()
-            table = table.load(os.path.join(dirname, tname)+".obj")
+            table = table.load(os.path.join(dirname, tname) + ".obj")
 
             self._tables[tname] = table
             cur = self._conn.cursor()
@@ -284,15 +292,15 @@ class Database:
                     cur.execute(row.encode('utf-8'))
                 except pymysql.err.MySQLError as e:
                     print "Unable to INSERT INTO table `{0} {1}` exception raised".format(tname, e)
-                    print "-"*10
+                    print "-" * 10
                     print row
-                    print "-"*10
+                    print "-" * 10
                     continue
 
             if SQL_INSERT_ST_POST:
                 cur.execute(SQL_INSERT_ST_POST.format(tname))
 
-            _ = cur.fetchall()
+            # _ = cur.fetchall()
 
         shutil.rmtree(path)
         return len(self._tables), tablelist
@@ -414,7 +422,7 @@ class Table:
 
         return cur.fetchall()
 
-    def _get_row_ddl(self,row):
+    def _get_row_ddl(self, row):
         query = ""
         fields = self._desc
         query += "INSERT INTO `" + self._tablename + "` ( `" + "`,`".join(fields.keys()) + "` ) VALUES ("
@@ -485,11 +493,11 @@ class Table:
 
 
 def convert_bit(b):
-    b = "\x00" * (8 - len(b)) + b # pad w/ zeroes
+    b = "\x00" * (8 - len(b)) + b  # pad w/ zeroes
     return struct.unpack(">Q", b)[0]
 
-if sys.version_info > (2, 7):
 
+if sys.version_info > (2, 7):
     def _build_parser():
         parser = argparse.ArgumentParser(prog="mydump")
 
@@ -520,7 +528,6 @@ if sys.version_info > (2, 7):
 
         assert isinstance(parser, object)
         return parser
-
 
     def _parse_command(parser=None):
         global VERBOSE
@@ -555,10 +562,7 @@ if sys.version_info > (2, 7):
             db.restore(filename=path, tablelist=args.tables, exclude=args.exclude)
             return
         if args.dump:
-            db.dump(filename=path,tablelist=args.tables,exclude=args.exclude)
-
-
-from ansible.module_utils.basic import *
+            db.dump(filename=path, tablelist=args.tables, exclude=args.exclude)
 
 
 def main():

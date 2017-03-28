@@ -4,12 +4,13 @@
 import struct
 import io
 import pymysql
-from ansible.module_utils.basic import *
+from ansible.module_utils.basic import AnsibleModule
 
 """
-Pure python implementation of mysql utility as ansible module (and standalone script for python>2.7)
-This code uses pymysql 3d party library
-This module permit free query execution on a mysql database. Supports inline query and .sql files
+Pure python implementation of mysql utility as ansible module (and standalone
+script for python>2.7) This code uses pymysql 3d party library
+This module permit free query execution on a mysql database. Supports inline
+query and .sql files
 """
 
 __author__ = "Manuel Bovo <mbovo@facilitylive.com>"
@@ -44,7 +45,7 @@ def my_exec(conn=None, path=None):
                 # my_query(conn, "".join(content))
                 cur.execute("".join(content))
                 rev = cur.fetchall()
-                if len(rev)>0:
+                if len(rev) > 0:
                     res[n] = rev
                 content = list()
 
