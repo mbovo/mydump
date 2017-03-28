@@ -4,17 +4,18 @@
 import struct
 import io
 import pymysql
-from ansible.module_utils.basic import *
+from ansible.module_utils.basic import AnsibleModule
 
 """
-Pure python implementation of mysql utility as ansible module (and standalone script for python>2.7)
-This code uses pymysql 3d party library
-This module permit free query execution on a mysql database. Supports inline query and .sql files
+Pure python implementation of mysql utility as ansible module (and standalone
+script for python>2.7) This code uses pymysql 3d party library
+This module permit free query execution on a mysql database. Supports inline
+query and .sql files
 """
 
 __author__ = "Manuel Bovo <mbovo@facilitylive.com>"
 __license__ = "MIT"
-__version__ = "2.4.1"
+__version__ = "2.4.2"
 
 VERBOSE = 0
 
@@ -30,7 +31,9 @@ def my_query(conn=None, query=None):
 def my_exec(conn=None, path=None):
 
     n = 0
+    res = dict()
     content = list()
+    cur = conn.cursor()
     with io.open(path, 'rb') as fp:
         for line in fp:
             n += 1
@@ -39,10 +42,14 @@ def my_exec(conn=None, path=None):
             if line.endswith(";\n") and len(line) > 1:
                 # query = "".join(content)
                 # print query
-                my_query(conn, "".join(content))
+                # my_query(conn, "".join(content))
+                cur.execute("".join(content))
+                rev = cur.fetchall()
+                if len(rev) > 0:
+                    res[n] = rev
                 content = list()
 
-    return dict(statements=n)
+    return dict(statements=n, results=res)
 
 
 def convert_bit(b):
