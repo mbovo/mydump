@@ -15,7 +15,7 @@ query and .sql files
 
 __author__ = "Manuel Bovo <mbovo@facilitylive.com>"
 __license__ = "MIT"
-__version__ = "2.4.2"
+__version__ = "2.4.3"
 
 VERBOSE = 0
 
@@ -73,7 +73,8 @@ def main():
         "password": {"required": True, "type": "str"},
         "charset": {"required": False, "default": "utf8", "type": "str"},
         "query": {"required": False, "default": None,  "type": "str"},
-        "file": {"required": False, "default": None, "type": "str"}
+        "file": {"required": False, "default": None, "type": "str"},
+        "force": {"required": False, "default": False, "type:": "bool"}
     }
 
     m = AnsibleModule(argument_spec=fields)
@@ -92,7 +93,7 @@ def main():
                                conv=convert_matrix,
                                cursorclass=pymysql.cursors.DictCursor)
 
-    except pymysql.err.MySQLError as e:
+    except pymysql.err.Error as e:
         m.fail_json(msg=str(e))
 
     try:
@@ -100,7 +101,12 @@ def main():
             res = my_query(conn, args['query'])
         else:
             res = my_exec(conn, args['file'])
-    except (pymysql.err.MySQLError, IOError) as e:
+    except pymysql.err.ProgrammingError as e:
+        if bool(args['force']):
+            res = str(e)
+        else:
+            m.fail_json(msg=str(e))
+    except (pymysql.err.Error, IOError) as e:
         m.fail_json(msg=str(e))
         return
 

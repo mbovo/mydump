@@ -26,7 +26,7 @@ Pure python implementation of mysqldump utility as ansible module
 
 __author__ = "Manuel Bovo <mbovo@facilitylive.com>"
 __license__ = "MIT"
-__version__ = "2.4.1"
+__version__ = "2.4.3"
 
 VERBOSE = 0
 
