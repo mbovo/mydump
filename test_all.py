@@ -7,9 +7,9 @@ import pytest
 @pytest.fixture()
 def conn():
     return pymysql.connect(host='localhost',
-                           db='g7-fportal',
+                           db='test',
                            user='root',
-                           password='asdf10',
+                           password='',
                            cursorclass=pymysql.cursors.DictCursor)
 
 
@@ -19,9 +19,9 @@ def db():
     convert_matrix[pymysql.FIELD_TYPE.BIT] = mysql_dump.convert_bit
 
     return mysql_dump.Database(host='localhost',
-                  db='g7-fportal',
+                  db='test',
                   user='root',
-                  password='asdf10',
+                  password='',
                   conv=convert_matrix)
 
 slow = pytest.mark.skipif(
@@ -67,9 +67,9 @@ class TestDump:
     def test_restore(self):
 
         db = mysql_dump.Database(host='localhost',
-                      db='g7-fportal',
+                      db='test',
                       user='root',
-                      password='asdf10')
+                      password='')
 
         print db.restore('/tmp/test.dmp')
 
