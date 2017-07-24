@@ -8,7 +8,7 @@ install: "pip install -r requirements.txt"
 service: mysql
 before_install:
   - mysql -e 'CREATE DATABASE IF NOT EXISTS test;'
-  - mysql -e "INSERT INTO mysql.user (User,Host,Password,Grant_priv) VALUES ('root','localhost',PASSWORD('password'),'Y'),('root'','127.0.0.1',PASSWORD('password'),'Y') ON DUPLICATE KEY UPDATE Password=PASSWORD('password'),Grant_priv='Y';"
+  - mysql -e "INSERT INTO mysql.user (User,Host,Password,Grant_priv) VALUES ('root','localhost',PASSWORD('password'),'Y'),('root','127.0.0.1',PASSWORD('password'),'Y') ON DUPLICATE KEY UPDATE Password=PASSWORD('password'),Grant_priv='Y';"
   - mysql -e "GRANT ALL ON *.* TO 'root'@'localhost'; GRANT ALL ON *.* TO 'root'@'127.0.0.1'; FLUSH PRIVILEGES;"
 # command to run tests
 script: pytest
