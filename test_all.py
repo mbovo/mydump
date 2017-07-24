@@ -9,7 +9,7 @@ def conn():
     return pymysql.connect(host='localhost',
                            db='test',
                            user='root',
-                           password='',
+                           password='password',
                            cursorclass=pymysql.cursors.DictCursor)
 
 
@@ -21,7 +21,7 @@ def db():
     return mysql_dump.Database(host='localhost',
                   db='test',
                   user='root',
-                  password='',
+                  password='password',
                   conv=convert_matrix)
 
 slow = pytest.mark.skipif(
@@ -69,7 +69,7 @@ class TestDump:
         db = mysql_dump.Database(host='localhost',
                       db='test',
                       user='root',
-                      password='')
+                      password='password')
 
         print db.restore('/tmp/test.dmp')
 
