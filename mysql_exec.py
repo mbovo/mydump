@@ -15,7 +15,7 @@ query and .sql files
 
 __author__ = "Manuel Bovo <mbovo@facilitylive.com>"
 __license__ = "MIT"
-__version__ = "2.4.3"
+__version__ = "2.4.5"
 
 VERBOSE = 0
 
@@ -39,17 +39,17 @@ def my_exec(conn=None, path=None):
             n += 1
             if not line.startswith('--') and len(line) > 1:
                 content.append(line)
+                s[line] = 0
             if line.endswith(";\n") and len(line) > 1:
                 # query = "".join(content)
                 # print query
                 # my_query(conn, "".join(content))
                 cur.execute("".join(content))
                 rev = cur.fetchall()
-                if len(rev) > 0:
-                    res[n] = rev
+                s[line] = rev
                 content = list()
 
-    return dict(statements=n, results=res)
+    return dict(lines=n, parsed=len(res), results=res)
 
 
 def convert_bit(b):
@@ -91,7 +91,9 @@ def main():
                                password=args['password'],
                                charset=args['charset'],
                                conv=convert_matrix,
-                               cursorclass=pymysql.cursors.DictCursor)
+                               cursorclass=pymysql.cursors.DictCursor,
+                               autocommit=True
+                               )
 
     except pymysql.err.Error as e:
         m.fail_json(msg=str(e))
@@ -110,6 +112,7 @@ def main():
         m.fail_json(msg=str(e))
         return
 
+    conn.close()
     m.exit_json(changed=True, results=res)
 
 
