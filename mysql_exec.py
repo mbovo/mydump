@@ -39,14 +39,14 @@ def my_exec(conn=None, path=None):
             n += 1
             if not line.startswith('--') and len(line) > 1:
                 content.append(line)
-                s[line] = 0
+                res[line] = 0
             if line.endswith(";\n") and len(line) > 1:
                 # query = "".join(content)
                 # print query
                 # my_query(conn, "".join(content))
                 cur.execute("".join(content))
                 rev = cur.fetchall()
-                s[line] = rev
+                res[line] = rev
                 content = list()
 
     return dict(lines=n, parsed=len(res), results=res)
