@@ -105,7 +105,7 @@ class Database:
                                      port=port,
                                      unix_socket=unix_socket,
                                      cursorclass=cursorclass,
-                                     commit=True
+                                     autocommit=True
                                      )
         self._dbname = db
         self._odbc = "{0}:{1}@{2}/{3}".format(user, password, host, db)
