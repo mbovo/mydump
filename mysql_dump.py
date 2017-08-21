@@ -26,7 +26,7 @@ Pure python implementation of mysqldump utility as ansible module
 
 __author__ = "Manuel Bovo <mbovo@facilitylive.com>"
 __license__ = "MIT"
-__version__ = "2.4.3"
+__version__ = "2.4.5"
 
 VERBOSE = 0
 
@@ -104,7 +104,9 @@ class Database:
                                      ssl=ssl,
                                      port=port,
                                      unix_socket=unix_socket,
-                                     cursorclass=cursorclass)
+                                     cursorclass=cursorclass,
+                                     commit=True
+                                     )
         self._dbname = db
         self._odbc = "{0}:{1}@{2}/{3}".format(user, password, host, db)
         self._tablenames = list()
